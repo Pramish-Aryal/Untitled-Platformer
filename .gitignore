@@ -1,0 +1,9 @@
+.vs/
+/bin/
+/build
+/extern/
+/data/Individual Sprites
+game.*
+Untitled Game.sln
+test
+.clang-format

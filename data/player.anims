@@ -1,0 +1,12 @@
+#path: "./data/adventurer-spritesheet.png"
+#width: 50
+#height: 37
+IDLE: 0 4
+CROUCH: 4 4
+RUN: 8 5
+
+
+#path: "./data/adventurer-spritesheet.png"
+ATK1: 42 5
+ATK2: 47 6
+ATK3: 53 6

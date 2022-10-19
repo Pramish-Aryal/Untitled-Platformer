@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+	<Type Name="String">
+		<Intrinsic Name="length" Expression="length" />
+		<Intrinsic Name="data" Expression="data" />
+		<DisplayString>{data,[length]}</DisplayString>
+		<StringView>data,[length]</StringView>
+		<Expand>
+			<Item Name="[length]" ExcludeView="simple">length</Item>
+			<ArrayItems>
+				<Size>length</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="Array_View&lt;*&gt;">
+		<DisplayString>{{ count={count} }}</DisplayString>
+		<Expand>
+			<Item Name="[count]" ExcludeView="simple">count</Item>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="Vec2">
+		<DisplayString>{{ {x}, {y} }}</DisplayString>
+		<Expand>
+			<Item Name="[x]" ExcludeView="simple">x</Item>
+			<Item Name="[y]" ExcludeView="simple">y</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Vec3">
+		<DisplayString>{{ {x}, {y}, {z} }}</DisplayString>
+		<Expand>
+			<Item Name="[x]" ExcludeView="simple">x</Item>
+			<Item Name="[y]" ExcludeView="simple">y</Item>
+			<Item Name="[z]" ExcludeView="simple">z</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Vec4">
+		<DisplayString>{{ {x}, {y}, {z}, {w} }}</DisplayString>
+		<Expand>
+			<Item Name="[x]" ExcludeView="simple">x</Item>
+			<Item Name="[y]" ExcludeView="simple">y</Item>
+			<Item Name="[z]" ExcludeView="simple">z</Item>
+			<Item Name="[w]" ExcludeView="simple">w</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Mat2">
+		<DisplayString>{{ {rows[0]}, {rows[1]} }}</DisplayString>
+		<Expand>
+			<Item Name="[0]" ExcludeView="simple">rows[0]</Item>
+			<Item Name="[1]" ExcludeView="simple">rows[1]</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Mat3">
+		<DisplayString>{{ {rows[0]}, {rows[1]}, {rows[2]} }}</DisplayString>
+		<Expand>
+			<Item Name="[0]" ExcludeView="simple">rows[0]</Item>
+			<Item Name="[1]" ExcludeView="simple">rows[1]</Item>
+			<Item Name="[2]" ExcludeView="simple">rows[2]</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Mat4">
+		<DisplayString>{{ {rows[0]}, {rows[1]}, {rows[2]}, {rows[3]} }}</DisplayString>
+		<Expand>
+			<Item Name="[0]" ExcludeView="simple">rows[0]</Item>
+			<Item Name="[1]" ExcludeView="simple">rows[1]</Item>
+			<Item Name="[2]" ExcludeView="simple">rows[2]</Item>
+			<Item Name="[3]" ExcludeView="simple">rows[3]</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Quat">
+		<DisplayString>{{ {w}, {x}, {y}, {z} }}</DisplayString>
+		<Expand>
+			<Item Name="[w]" ExcludeView="simple">w</Item>
+			<Item Name="[x]" ExcludeView="simple">x</Item>
+			<Item Name="[y]" ExcludeView="simple">y</Item>
+			<Item Name="[z]" ExcludeView="simple">z</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Array&lt;*&gt;">
+		<DisplayString>{{ count={count}, allocated={allocated} }}</DisplayString>
+		<Expand>
+			<Item Name="[count]" ExcludeView="simple">count</Item>
+			<Item Name="[allocated]" ExcludeView="simple">allocated</Item>
+			<Item Name="[allocator]" ExcludeView="simple">allocator</Item>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="Hash_Table&lt;*&gt;">
+		<DisplayString>{{ count={count} }}</DisplayString>
+		<Expand>
+			<ArrayItems IncludeView="buckets">
+					<Size>p2allocated >> HASHTABLE_BUCKET_SHIFT</Size>
+					<ValuePointer>buckets</ValuePointer>
+			</ArrayItems>			
+			<Item Name="[count]" ExcludeView="simple">count</Item>
+			<Item Name="[allocator]" ExcludeView="simple">allocator</Item>
+			<Item Name="[storage]" >storage</Item>
+		</Expand>
+	</Type>
+
+</AutoVisualizer>
