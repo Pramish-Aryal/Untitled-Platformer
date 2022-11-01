@@ -1,0 +1,11 @@
+#path: "./data/Skeleton/Idle.png"
+#width: 150
+#height: 150
+#count: 10
+IDLE: 0 4
+
+#path: "./data/Skeleton/Walk.png"
+WALK: 0 4
+
+#path: "./data/Skeleton/Attack.png"
+ATK: 0 8
