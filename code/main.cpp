@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <math.h>
 
+// TODO: replace SDL with directx
 #include <SDL2/SDL.h>
 
 #include "defer.h"
@@ -30,7 +31,6 @@ struct Texture {
 	SDL_Texture *tex;
 };
 
-
 //TODO: Revamp input system
 struct Input {
 	bool is_down[256];
@@ -51,6 +51,7 @@ inline bool is_released(Input *input, SDL_Scancode key) {
 }
 
 // NOTE: Animations need to be defined in order as they appear in the animation file
+// TODO: Maybe use hashmaps to not do this?
 enum {
 	PLAYER_ANIMATION_IDLE,
 	PLAYER_ANIMATION_CROUCH,
@@ -176,6 +177,7 @@ void update_frame(Animation *animations, Actor actor)
 }
 
 // TODO: Pool this into an allocator
+// TODO: Turn them into array_view as well
 Animation animations[256];
 int animation_count;
 AnimationFrame animation_frame_buffer[256] = {};
@@ -223,6 +225,7 @@ int parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 	return animation_count++;
 }
 
+// TODO: YEET
 void draw_ring(SDL_Renderer *renderer, Circle circle, Uint32 color)
 {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));

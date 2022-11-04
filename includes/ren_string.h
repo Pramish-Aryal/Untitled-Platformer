@@ -2,6 +2,7 @@
 
 #include <assert.h>
 
+// TODO: Call this string view and use it accordingly
 struct String {
 	ptrdiff_t len;
 	uint8_t *data;
@@ -24,6 +25,7 @@ struct String {
 	inline const uint8_t *end() const { return data + len; }
 };
 
+// TODO: Add more string handling functions
 bool operator==(String a, String b)
 {
 	if (a.len != b.len)

@@ -1,5 +1,6 @@
 #pragma once
 
+// TODO: Look into how to vectorize everything, or even just replace ren_math.h with an actual maths library
 #include <math.h>
 #include <assert.h>
 
@@ -256,6 +257,7 @@ bool gjk(ShapeA s1, ShapeB s2, V2 *points = 0, int* size = 0)
 	}
 }
 
+// TODO: Make proper array handling functions
 constexpr int EPA_MAX_POINTS = 64;
 
 template<typename T>
@@ -269,7 +271,7 @@ void insert(T *arr, int &size, int index, T val)
 	arr[index] = val;
 }
 
-// todo make the insertion dynamic
+// TODO: make the insertion dynamic
 template<typename ShapeA, typename ShapeB>
 bool epa(ShapeA s1, ShapeB s2, V2 &dist) {
 	V2 points[EPA_MAX_POINTS];
