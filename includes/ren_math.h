@@ -146,3 +146,105 @@ template<typename T>
 T map_range(T r1, T r2, T val, T r3, T r4) {
 	return r3 + (r4 - r3) * (val - r1) / (r2 - r1);
 }
+
+
+struct Rect {
+	V2 min;
+	V2 max;
+};
+
+struct Circle {
+	V2 pos;
+	float radius;
+};
+
+constexpr int MAX_POINTS = 10;
+
+struct Polygon {
+	V2 points[MAX_POINTS];
+	V2 pos;
+	int size;
+};
+
+V2 center(Rect a) {
+	return (a.min + a.max) / 2.f;
+}
+
+V2 center(Circle a) {
+	return a.pos;
+}
+
+V2 center(Polygon a) {
+	return a.pos;
+}
+
+V2 support(Rect a, V2 dir) {
+	return { dir.x > 0 ? a.max.x : a.min.x, dir.y > 0 ? a.max.y : a.min.y };
+}
+
+V2 support(Circle a, V2 dir) {
+	return a.pos + a.radius * normalizez(dir);
+}
+
+V2 support(Polygon a, V2 dir) {
+	int index = 0;
+	float max_dot = dot(a.points[0], dir);
+	for (int i = 1; i < a.size; ++i) {
+		float dot_val = dot(a.points[i], dir);
+		if (dot_val > max_dot) {
+			max_dot = dot_val;
+			index = i;
+		}
+	}
+	return a.pos + a.points[index];
+}
+
+template<typename ShapeA, typename ShapeB>
+V2 support(ShapeA a, ShapeB b, V2 dir) {
+	return support(a, dir) - support(b, -dir);
+}
+
+bool handle_simplex(V2 *simplex, int &simplex_size, V2 &dir) {
+	if (simplex_size == 2) {
+		V2 b = simplex[0], a = simplex[1];
+		V2 ab = b - a, ao = -a;
+		V2 ab_perp = triple_prod(V3(ab), V3(ao), V3(ab)).xy;
+		dir = ab_perp;
+		return false;
+	} else {
+		V2 c = simplex[0], b = simplex[1], a = simplex[2];
+		V2 ab = b - a, ac = c - a, ao = -a;
+		V2 ab_perp = triple_prod(V3(ab), V3(ao), V3(ab)).xy;
+		V2 ac_perp = triple_prod(V3(ac), V3(ao), V3(ac)).xy;
+		if (dot(ab_perp, dir) > 0) {
+			simplex[0] = simplex[1];
+			simplex[1] = simplex[2];
+			simplex_size--;
+			dir = ab_perp;
+			return false;
+		} else if (dot(ac_perp, dir) > 0) {
+			simplex[1] = simplex[2];
+			simplex_size--;
+			dir = ac_perp;
+			return false;
+		}
+	}
+	return true;
+}
+
+template<typename ShapeA, typename ShapeB>
+bool gjk(ShapeA s1, ShapeB s2)
+{
+	V2 dir = normalizez(center(s2) - center(s1));
+	V2 simplex[3] = { support(s1, s2, dir) };
+	int simplex_size = 1;
+	dir = -simplex[0];
+	while (true) {
+		V2 a = support(s1, s2, dir);
+		if (dot(a, dir) < 0)
+			return false;
+		simplex[simplex_size++] = a;
+		if (handle_simplex(simplex, simplex_size, dir))
+			return true;
+	}
+}
