@@ -233,6 +233,14 @@ struct Circle {
 	float radius;
 };
 
+constexpr int MAX_POINTS = 10;
+
+struct Polygon {
+	V2 points[MAX_POINTS];
+	V2 pos;
+	int size;
+};
+
 //V2 support(Circle a, V2 dir) {
 //	return a.pos + normalizez(dir) * a.radius;
 //}
@@ -335,12 +343,29 @@ V2 center(Circle a) {
 	return a.pos;
 }
 
+V2 center(Polygon a) {
+	return a.pos;
+}
+
 V2 support(Rect a, V2 dir) {
 	return { dir.x > 0 ? a.max.x : a.min.x, dir.y > 0 ? a.max.y : a.min.y };
 }
 
 V2 support(Circle a, V2 dir) {
 	return a.pos + a.radius * normalizez(dir);
+}
+
+V2 support(Polygon a, V2 dir) {
+	int index = 0;
+	float max_dot = dot(a.points[0], dir);
+	for (int i = 1; i < a.size; ++i) {
+		float dot_val = dot(a.points[i], dir);
+		if (dot_val > max_dot) {
+			max_dot = dot_val;
+			index = i;
+		}
+	}
+	return a.pos + a.points[index];
 }
 
 template<typename ShapeA, typename ShapeB>
@@ -381,7 +406,7 @@ bool gjk(ShapeA s1, ShapeB s2)
 {
 	V2 dir = normalizez(center(s2) - center(s1));
 	V2 simplex[3] = {support(s1, s2, dir)};
-	int simplex_size = 1;;
+	int simplex_size = 1;
 	dir = -simplex[0];
 	while (true) {
 		V2 a = support(s1, s2, dir);
@@ -429,6 +454,23 @@ void draw_ring(SDL_Renderer *renderer, Circle circle, Uint32 color)
 	}
 }
 
+void make_polygon(Polygon *p, int n, float r, float offset_angle = 0.f) {
+	assert(n <= MAX_POINTS);
+	p->size = n;
+	for (int i = 0; i < n; ++i) {
+		p->points[i] = V2(r * cosf(offset_angle + 2 * PI32 * i / (float) n), r * sinf(offset_angle + 2 * PI32 * i / (float) n));
+	}
+}
+
+void draw_polygon(SDL_Renderer *renderer, Polygon *p, Uint32 color) {
+	SDL_SetRenderDrawColor(renderer, HexColor(color));
+	for (int i = 0; i < p->size; ++i) {
+		V2 p1 = p->pos + p->points[i];
+		V2 p2 = p->pos + p->points[(i + 1) % p->size];
+		SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
@@ -467,11 +509,19 @@ int main(int argc, char **argv)
 	uint64_t last_counter = SDL_GetPerformanceCounter();
 	const uint64_t query_perf_freq = SDL_GetPerformanceFrequency();
 	float accumulator = dt;
+
 	while (is_running) {
 
 		memcpy(input.was_down, input.is_down, sizeof(input.is_down));
 		// memset(input.is_down, 0, sizeof(input.is_down));
 		memset(input.half_transition, 0, sizeof(input.half_transition));
+
+		V2 mouse;
+		{
+			int mouse_x, mouse_y;
+			SDL_GetMouseState(&mouse_x, &mouse_y);
+			mouse = { (float)mouse_x, (float) mouse_y };
+		}
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
@@ -529,17 +579,22 @@ int main(int argc, char **argv)
 		Rect r_player = { player.pos, player.pos + player.size };
 		Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
 		Rect r_enemy = { enemy.pos, enemy.pos + enemy.size };
-
+		Polygon poly;
+		make_polygon(&poly, 5, 50);
+		poly.pos = V2(mouse.x, mouse.y);
 		Uint32 collision_color = 0xff0000ff;
 		
-		//if (gjk(r_player, r_enemy)) {
-		//	collision_color = 0x00ffffff;
-		//}
-
 		if (gjk(c_player, r_enemy)) {
 			collision_color = 0xffffffff;
 		}
-		
+
+		if (gjk(poly, r_enemy)) {
+			collision_color = 0xff00ffff;
+		}
+
+		if (gjk(poly, c_player)) {
+			collision_color = 0x00ffffff;
+		}
 
 		SDL_SetRenderDrawColor(renderer, HexColor(0x181818ff));
 		SDL_RenderClear(renderer);
@@ -553,13 +608,13 @@ int main(int argc, char **argv)
 		};
 
 		SDL_SetRenderDrawColor(renderer, HexColor(collision_color));
-		SDL_FRect f_player = rect_to_sdl_rect(r_player);
-		SDL_RenderDrawRectF(renderer, &f_player);
 
 		SDL_FRect f_enemy = rect_to_sdl_rect(r_enemy);
 		SDL_RenderDrawRectF(renderer, &f_enemy);
 
 		draw_ring(renderer, c_player, collision_color);
+
+		draw_polygon(renderer, &poly, collision_color);
 
 		SDL_RenderPresent(renderer);
 

@@ -3,6 +3,9 @@
 #include <math.h>
 #include <assert.h>
 
+#define PI32 3.14159265359f
+#define PI64 3.14159265359
+
 template<typename T>
 struct V2T {
 	union {
