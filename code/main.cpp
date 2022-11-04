@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include <SDL2/SDL.h>
+
 #include "defer.h"
 #include "ren_math.h"
 #include "ren_string.h"
@@ -29,6 +30,8 @@ struct Texture {
 	SDL_Texture *tex;
 };
 
+
+//TODO: Revamp input system
 struct Input {
 	bool is_down[256];
 	bool was_down[256];
@@ -48,7 +51,7 @@ inline bool is_released(Input *input, SDL_Scancode key) {
 }
 
 // NOTE: Animations need to be defined in order as they appear in the animation file
-enum PlayerAnimationState {
+enum {
 	PLAYER_ANIMATION_IDLE,
 	PLAYER_ANIMATION_CROUCH,
 	PLAYER_ANIMATION_RUN,
@@ -59,7 +62,7 @@ enum PlayerAnimationState {
 	PLAYER_ANIMATION_COUNT
 };
 
-enum EnemyAnimationState {
+enum {
 	ENEMY_ANIMATION_IDLE,
 	ENEMY_ANIMATION_WALK,
 	ENEMY_ANIMATION_ATK,
@@ -139,7 +142,7 @@ Texture load_texture(SDL_Renderer *renderer, const char *filename)
 	return result;
 }
 
-void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animations, Actor actor, V2 scale = {1.f, 1.f})
+void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animations, Actor actor)
 {
 	// HACK: Simplify this (or even think up a better solution)
 	int frame_index = animations[actor.animation_index].frames[actor.animation_state].current_frame_index +
@@ -155,12 +158,12 @@ void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animati
 	src_rect.w = animations[actor.animation_index].width;
 	src_rect.h = animations[actor.animation_index].height;
 
-	SDL_FRect dest_rect = { actor.pos.x, actor.pos.y,  src_rect.w * scale.x, src_rect.h * scale.y };
+	SDL_FRect dest_rect = { actor.pos.x, actor.pos.y,  actor.size.x, actor.size.y };
 
 	SDL_RenderCopyF(renderer, textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, &src_rect, &dest_rect);
 }
 
-void update_frame(Animation* animations, Actor actor)
+void update_frame(Animation *animations, Actor actor)
 {
 	if (animations[actor.animation_index].counter > animations[actor.animation_index].count_till_update) {
 		animations[actor.animation_index].frames[actor.animation_state].current_frame_index =
@@ -220,13 +223,221 @@ int parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 	return animation_count++;
 }
 
+struct Rect {
+	V2 min;
+	V2 max;
+};
+
+struct Circle {
+	V2 pos;
+	float radius;
+};
+
+//V2 support(Circle a, V2 dir) {
+//	return a.pos + normalizez(dir) * a.radius;
+//}
+//
+//V2 support(Rect a, V2 dir)
+//{
+//	V2 max = {};
+//	max.x = dir.x > 0 ? a.max.x : a.min.x;
+//	max.y = dir.y > 0 ? a.max.y : a.min.y;
+//	return max;
+//}
+//
+//V2 support(Rect a, Rect b, V2 dir) {
+//	return support(a, dir) - support(b, -dir);
+//}
+//
+//V2 support(Rect a, Circle b, V2 dir) {
+//	return support(a, dir) - support(b, -dir);
+//}
+//
+//V2 support(Circle a, Rect b, V2 dir) {
+//	return support(a, dir) - support(b, -dir);
+//}
+//
+//template<typename A, typename B>
+//V2 support(A a, B b, V2 dir) {
+//	return support(a, dir) - support(b, -dir);
+//}
+//
+//bool line_case(V2 *simplex, V2& d)
+//{
+//	V2 AB = simplex[0] - simplex[1];
+//	V2 AO = V2() - simplex[1];
+//	V2 ABperp = triple_prod(V3(AB), V3(AO), V3(AB)).xy;
+//	d = ABperp;
+//	return false;
+//}
+//
+//bool triangle_case(V2 *simplex, int& simplex_size, V2 &d)
+//{
+//	V2 AB = simplex[1] - simplex[2];
+//	V2 AC = simplex[0] - simplex[2];
+//	V2 AO = V2() - simplex[2];
+//	V2 ABperp = triple_prod(V3(AC), V3(AB), V3(AB)).xy;
+//	V2 ACperp = triple_prod(V3(AB), V3(AC), V3(AC)).xy;
+//	if (dot(ABperp, AO) > 0) {
+//		simplex[0] = simplex[1];
+//		simplex[1] = simplex[2];
+//		simplex_size--;
+//		d = ABperp;
+//		return false;
+//	} else if (dot(ABperp, AO) > 0) {
+//		simplex[1] = simplex[2];
+//		simplex_size--;
+//		d = ACperp;
+//		return false;
+//	}
+//	return true;
+//}
+//
+//bool handle_simplex(V2 *simplex, int& simplex_size, V2& d)
+//{
+//	if (simplex_size == 2)
+//		return line_case(simplex, d);
+//	return triangle_case(simplex, simplex_size, d);
+//}
+//
+//V2 center(Circle a) {
+//	return a.pos;
+//}
+//
+//V2 center(Rect a) {
+//	return (a.min + a.max)  / 2;
+//}
+//
+//template<typename A, typename B>
+//bool gjk(A a, B b)
+//{
+//	V2 d = normalize(center(a) - center(b));
+//	V2 simplex[3];
+//	simplex[0] = support(a, b, d);
+//	int simplex_size = 1;
+//	d = V2(0) - simplex[0];
+//
+//	while (true) {
+//		V2 A = support(a, b, d);
+//		if (dot(A, d) < 0)
+//			return false;
+//		simplex[simplex_size++] = A;
+//		if (handle_simplex(simplex, simplex_size, d))
+//			return true;
+//	}
+//}
+
+V2 center(Rect a) {
+	return (a.min + a.max) / 2.f;
+}
+
+V2 center(Circle a) {
+	return a.pos;
+}
+
+V2 support(Rect a, V2 dir) {
+	return { dir.x > 0 ? a.max.x : a.min.x, dir.y > 0 ? a.max.y : a.min.y };
+}
+
+V2 support(Circle a, V2 dir) {
+	return a.pos + a.radius * normalizez(dir);
+}
+
+template<typename ShapeA, typename ShapeB>
+V2 support(ShapeA a, ShapeB b, V2 dir){
+	return support(a, dir) - support(b, -dir);
+}
+
+bool handle_simplex(V2 *simplex, int &simplex_size, V2 &dir) {
+	if (simplex_size == 2) {
+		V2 b = simplex[0], a = simplex[1];
+		V2 ab = b - a, ao = -a;
+		V2 ab_perp = triple_prod(V3(ab), V3(ao), V3(ab)).xy;
+		dir = ab_perp;
+		return false;
+	} else {
+		V2 c = simplex[0], b = simplex[1], a = simplex[2];
+		V2 ab = b - a, ac = c - a, ao = -a;
+		V2 ab_perp = triple_prod(V3(ab), V3(ao), V3(ab)).xy;
+		V2 ac_perp = triple_prod(V3(ac), V3(ao), V3(ac)).xy;
+		if (dot(ab_perp, dir) > 0) {
+			simplex[0] = simplex[1];
+			simplex[1] = simplex[2];
+			simplex_size--;
+			dir = ab_perp;
+			return false;
+		} else if (dot(ac_perp, dir) > 0) {
+			simplex[1] = simplex[2];
+			simplex_size--;
+			dir = ac_perp;
+			return false;
+		}
+	}
+	return true;
+}
+
+template<typename ShapeA, typename ShapeB>
+bool gjk(ShapeA s1, ShapeB s2)
+{
+	V2 dir = normalizez(center(s2) - center(s1));
+	V2 simplex[3] = {support(s1, s2, dir)};
+	int simplex_size = 1;;
+	dir = -simplex[0];
+	while (true) {
+		V2 a = support(s1, s2, dir);
+		if (dot(a, dir) < 0)
+			return false;
+		simplex[simplex_size++] = a;
+		if (handle_simplex(simplex, simplex_size, dir))
+			return true;
+	}
+}
+
+void draw_ring(SDL_Renderer *renderer, Circle circle, Uint32 color)
+{
+	SDL_SetRenderDrawColor(renderer, HexColor(color));
+
+	float offsetx, offsety, d;
+
+	offsetx = 0;
+	offsety = circle.radius;
+	d = circle.radius - 1;
+	float x = circle.pos.x;
+	float y = circle.pos.y;
+
+	while (offsety >= offsetx) {
+		SDL_RenderDrawPointF(renderer, x + offsetx, y + offsety);
+		SDL_RenderDrawPointF(renderer, x + offsety, y + offsetx);
+		SDL_RenderDrawPointF(renderer, x - offsetx, y + offsety);
+		SDL_RenderDrawPointF(renderer, x - offsety, y + offsetx);
+		SDL_RenderDrawPointF(renderer, x + offsetx, y - offsety);
+		SDL_RenderDrawPointF(renderer, x + offsety, y - offsetx);
+		SDL_RenderDrawPointF(renderer, x - offsetx, y - offsety);
+		SDL_RenderDrawPointF(renderer, x - offsety, y - offsetx);
+
+		if (d >= 2 * offsetx) {
+			d -= 2 * offsetx + 1;
+			offsetx += 1;
+		} else if (d < 2 * (circle.radius - offsety)) {
+			d += 2 * offsety - 1;
+			offsety -= 1;
+		} else {
+			d += 2 * (offsety - offsetx - 1);
+			offsety -= 1;
+			offsetx += 1;
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
 		fatal_error(SDL_GetError());
 	}
 
-	SDL_Window *window = SDL_CreateWindow("Untitled-Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720,
+	V2 resolution(1280, 720);
+
+	SDL_Window *window = SDL_CreateWindow("Untitled-Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (int) resolution.x, (int) resolution.y,
 										  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND) < 0) {
@@ -238,14 +449,17 @@ int main(int argc, char **argv)
 	uint64_t last_ms = SDL_GetTicks64();
 	uint64_t start_ms = SDL_GetTicks64();
 
-	PlayerAnimationState player_anim_state = PLAYER_ANIMATION_IDLE;
-
 	Input input = {};
 	Actor player = {};
 	Actor enemy = {};
 
 	player.animation_index = parse_animation_file(renderer, u8"./data/player.anims");
+	player.size = { 3.f * animations[player.animation_index].width, 3.f * animations[player.animation_index].height };
+
 	enemy.animation_index = parse_animation_file(renderer, u8"./data/enemy.anims");
+	enemy.size = { 2.f * animations[enemy.animation_index].width, 2.f * animations[enemy.animation_index].height };
+
+	enemy.pos = resolution / 2 - enemy.size / 2;
 
 	float t = 0;
 	float dt = 0.01f;
@@ -253,7 +467,6 @@ int main(int argc, char **argv)
 	uint64_t last_counter = SDL_GetPerformanceCounter();
 	const uint64_t query_perf_freq = SDL_GetPerformanceFrequency();
 	float accumulator = dt;
-	uint64_t frame_counter = 0;
 	while (is_running) {
 
 		memcpy(input.was_down, input.is_down, sizeof(input.is_down));
@@ -288,32 +501,65 @@ int main(int argc, char **argv)
 		player.accn.y -= is_held(&input, SDL_SCANCODE_W); // input.half_transition[SDL_SCANCODE_W] > 0;
 		player.accn.y += is_held(&input, SDL_SCANCODE_S); // input.half_transition[SDL_SCANCODE_S] > 0;
 
+		enemy.accn = {};
+		enemy.accn.y -= is_held(&input, SDL_SCANCODE_UP);
+		enemy.accn.x -= is_held(&input, SDL_SCANCODE_LEFT);
+		enemy.accn.x += is_held(&input, SDL_SCANCODE_RIGHT);
+		enemy.accn.y += is_held(&input, SDL_SCANCODE_DOWN);
+
 		if (is_pressed(&input, SDL_SCANCODE_SPACE)) {
 			player.animation_state = (player.animation_state + 1) % PLAYER_ANIMATION_COUNT;
 			enemy.animation_state = (enemy.animation_state + 1) % ENEMY_ANIMATION_COUNT;
 		}
 
-		normalizez(player.accn);
+		player.accn = normalizez(player.accn);
+		enemy.accn = normalizez(enemy.accn);
 
-		float scale = 100.f;
+		float speed = 250.f;
 
 		while (accumulator >= dt) {
 			// call into physics
-			player.pos += scale * player.accn * dt;
+			player.pos += speed * player.accn * dt;
+			enemy.pos += speed * enemy.accn * dt;
 			t += dt;
 			accumulator -= dt;
 		}
+		
 
-		char buff[64];
-		SDL_snprintf(buff, sizeof(buff), "%f %f -> %f %f", player.pos.x, player.pos.y, player.accn.x, player.accn.y);
-		SDL_SetWindowTitle(window, buff);
+		Rect r_player = { player.pos, player.pos + player.size };
+		Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
+		Rect r_enemy = { enemy.pos, enemy.pos + enemy.size };
+
+		Uint32 collision_color = 0xff0000ff;
+		
+		//if (gjk(r_player, r_enemy)) {
+		//	collision_color = 0x00ffffff;
+		//}
+
+		if (gjk(c_player, r_enemy)) {
+			collision_color = 0xffffffff;
+		}
+		
 
 		SDL_SetRenderDrawColor(renderer, HexColor(0x181818ff));
 		SDL_RenderClear(renderer);
-		
-		display_frame(renderer, textures, animations, player, {3, 3});
 
-		display_frame(renderer, textures, animations, enemy, {2, 2});
+		display_frame(renderer, textures, animations, player);
+
+		display_frame(renderer, textures, animations, enemy);
+
+		auto rect_to_sdl_rect = [] (Rect a) -> SDL_FRect {
+			return { a.min.x, a.min.y, (a.max - a.min).x, (a.max - a.min).y };
+		};
+
+		SDL_SetRenderDrawColor(renderer, HexColor(collision_color));
+		SDL_FRect f_player = rect_to_sdl_rect(r_player);
+		SDL_RenderDrawRectF(renderer, &f_player);
+
+		SDL_FRect f_enemy = rect_to_sdl_rect(r_enemy);
+		SDL_RenderDrawRectF(renderer, &f_enemy);
+
+		draw_ring(renderer, c_player, collision_color);
 
 		SDL_RenderPresent(renderer);
 
@@ -321,11 +567,14 @@ int main(int argc, char **argv)
 		update_frame(animations, enemy);
 
 		uint64_t current_counter = SDL_GetPerformanceCounter();
-		float frameTime = ((1000000.0f * (current_counter - last_counter)) / (float) query_perf_freq) / 1000000.0f;
+		float frame_time = ((1000000.0f * (current_counter - last_counter)) / (float) query_perf_freq) / 1000000.0f;
 		last_counter = current_counter;
 
-		frame_counter++;
-		accumulator += frameTime;
+		char buff[32] = {};
+		SDL_snprintf(buff, sizeof(buff), "%f", 1.f / frame_time);
+		SDL_SetWindowTitle(window, buff);
+
+		accumulator += frame_time;
 	}
 
 	return 0;

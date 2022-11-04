@@ -1,5 +1,7 @@
 #pragma once
 
+#include <assert.h>
+
 struct String {
 	ptrdiff_t len;
 	uint8_t *data;
@@ -8,14 +10,12 @@ struct String {
 	template <ptrdiff_t _len> constexpr String(const char (&a)[_len]) : data((uint8_t *) a), len(_len - 1) {}
 	String(const uint8_t *_Data, ptrdiff_t _Length) : data((uint8_t *) _Data), len(_Length) {}
 	String(const char *_Data, ptrdiff_t _Length) : data((uint8_t *) _Data), len(_Length) {}
-	const uint8_t &operator[](const ptrdiff_t index) const
-	{
-		SDL_assert(index < len);
+	const uint8_t &operator[](const ptrdiff_t index) const {
+		assert(index < len);
 		return data[index];
 	}
-	uint8_t &operator[](const ptrdiff_t index)
-	{
-		SDL_assert(index < len);
+	uint8_t &operator[](const ptrdiff_t index) {
+		assert(index < len);
 		return data[index];
 	}
 	inline uint8_t *begin() { return data; }
