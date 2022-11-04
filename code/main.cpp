@@ -315,6 +315,11 @@ int main(int argc, char **argv)
 	const uint64_t query_perf_freq = SDL_GetPerformanceFrequency();
 	float accumulator = dt;
 
+	Polygon poly;
+	make_polygon(&poly, 5, 50);
+	//poly.pos = V2(mouse.x, mouse.y);
+	poly.pos = resolution * 0.25f;
+
 	while (is_running) {
 
 		memcpy(input.was_down, input.is_down, sizeof(input.is_down));
@@ -325,17 +330,19 @@ int main(int argc, char **argv)
 		{
 			int mouse_x, mouse_y;
 			SDL_GetMouseState(&mouse_x, &mouse_y);
-			mouse = { (float)mouse_x, (float) mouse_y };
+			mouse = { (float) mouse_x, (float) mouse_y };
 		}
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
-				case SDL_QUIT: {
+				case SDL_QUIT:
+				{
 					is_running = false;
 				} break;
 
-				case SDL_KEYDOWN: {
+				case SDL_KEYDOWN:
+				{
 					if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
 						is_running = false;
 
@@ -343,7 +350,8 @@ int main(int argc, char **argv)
 					input.half_transition[event.key.keysym.scancode]++;
 				} break;
 
-				case SDL_KEYUP: {
+				case SDL_KEYUP:
+				{
 					input.is_down[event.key.keysym.scancode] = false;
 				} break;
 			}
@@ -379,27 +387,38 @@ int main(int argc, char **argv)
 			t += dt;
 			accumulator -= dt;
 		}
-		
+
 		Rect r_player = { player.pos, player.pos + player.size };
 		Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
 		Rect r_enemy = { enemy.pos, enemy.pos + enemy.size };
-		
-		Polygon poly;
-		make_polygon(&poly, 5, 50);
-		poly.pos = V2(mouse.x, mouse.y);
-		
+
+
+
 		Uint32 collision_color = 0xff0000ff;
-		
-		if (gjk(c_player, r_enemy)) {
-			collision_color = 0xffffffff;
-		}
 
-		if (gjk(poly, r_enemy)) {
-			collision_color = 0xff00ffff;
+		{
+			V2 dist;
+			if (epa(c_player, r_enemy, dist)) {
+				player.pos -= dist / 2.f;
+				enemy.pos += dist / 2.f;
+				collision_color = 0xffffffff;
+			}
 		}
-
-		if (gjk(poly, c_player)) {
-			collision_color = 0x00ffffff;
+		{
+			V2 dist;
+			if (epa(poly, r_enemy, dist)) {
+				poly.pos -= dist / 2.f;
+				enemy.pos += dist / 2.f;
+				collision_color = 0xff00ffff;
+			}
+		}
+		{
+			V2 dist;
+			if (epa(poly, c_player, dist)) {
+				poly.pos -= dist;
+				player.pos += dist / 2.f;
+				collision_color = 0x00ffffff;
+			}
 		}
 
 		SDL_SetRenderDrawColor(renderer, HexColor(0x181818ff));
