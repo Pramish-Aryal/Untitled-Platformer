@@ -241,100 +241,6 @@ struct Polygon {
 	int size;
 };
 
-//V2 support(Circle a, V2 dir) {
-//	return a.pos + normalizez(dir) * a.radius;
-//}
-//
-//V2 support(Rect a, V2 dir)
-//{
-//	V2 max = {};
-//	max.x = dir.x > 0 ? a.max.x : a.min.x;
-//	max.y = dir.y > 0 ? a.max.y : a.min.y;
-//	return max;
-//}
-//
-//V2 support(Rect a, Rect b, V2 dir) {
-//	return support(a, dir) - support(b, -dir);
-//}
-//
-//V2 support(Rect a, Circle b, V2 dir) {
-//	return support(a, dir) - support(b, -dir);
-//}
-//
-//V2 support(Circle a, Rect b, V2 dir) {
-//	return support(a, dir) - support(b, -dir);
-//}
-//
-//template<typename A, typename B>
-//V2 support(A a, B b, V2 dir) {
-//	return support(a, dir) - support(b, -dir);
-//}
-//
-//bool line_case(V2 *simplex, V2& d)
-//{
-//	V2 AB = simplex[0] - simplex[1];
-//	V2 AO = V2() - simplex[1];
-//	V2 ABperp = triple_prod(V3(AB), V3(AO), V3(AB)).xy;
-//	d = ABperp;
-//	return false;
-//}
-//
-//bool triangle_case(V2 *simplex, int& simplex_size, V2 &d)
-//{
-//	V2 AB = simplex[1] - simplex[2];
-//	V2 AC = simplex[0] - simplex[2];
-//	V2 AO = V2() - simplex[2];
-//	V2 ABperp = triple_prod(V3(AC), V3(AB), V3(AB)).xy;
-//	V2 ACperp = triple_prod(V3(AB), V3(AC), V3(AC)).xy;
-//	if (dot(ABperp, AO) > 0) {
-//		simplex[0] = simplex[1];
-//		simplex[1] = simplex[2];
-//		simplex_size--;
-//		d = ABperp;
-//		return false;
-//	} else if (dot(ABperp, AO) > 0) {
-//		simplex[1] = simplex[2];
-//		simplex_size--;
-//		d = ACperp;
-//		return false;
-//	}
-//	return true;
-//}
-//
-//bool handle_simplex(V2 *simplex, int& simplex_size, V2& d)
-//{
-//	if (simplex_size == 2)
-//		return line_case(simplex, d);
-//	return triangle_case(simplex, simplex_size, d);
-//}
-//
-//V2 center(Circle a) {
-//	return a.pos;
-//}
-//
-//V2 center(Rect a) {
-//	return (a.min + a.max)  / 2;
-//}
-//
-//template<typename A, typename B>
-//bool gjk(A a, B b)
-//{
-//	V2 d = normalize(center(a) - center(b));
-//	V2 simplex[3];
-//	simplex[0] = support(a, b, d);
-//	int simplex_size = 1;
-//	d = V2(0) - simplex[0];
-//
-//	while (true) {
-//		V2 A = support(a, b, d);
-//		if (dot(A, d) < 0)
-//			return false;
-//		simplex[simplex_size++] = A;
-//		if (handle_simplex(simplex, simplex_size, d))
-//			return true;
-//	}
-//}
-
 V2 center(Rect a) {
 	return (a.min + a.max) / 2.f;
 }
@@ -575,13 +481,14 @@ int main(int argc, char **argv)
 			accumulator -= dt;
 		}
 		
-
 		Rect r_player = { player.pos, player.pos + player.size };
 		Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
 		Rect r_enemy = { enemy.pos, enemy.pos + enemy.size };
+		
 		Polygon poly;
 		make_polygon(&poly, 5, 50);
 		poly.pos = V2(mouse.x, mouse.y);
+		
 		Uint32 collision_color = 0xff0000ff;
 		
 		if (gjk(c_player, r_enemy)) {
