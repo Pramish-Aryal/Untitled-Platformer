@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <math.h>
 
-// TODO: replace SDL with directx
+// TODO: replace SDL with DirectX
 #include <SDL2/SDL.h>
 
 #include "defer.h"
@@ -16,6 +16,8 @@
 
 #define HexColor(c) ((c) >> (8 * 3)) & 0xff, ((c) >> (8 * 2)) & 0xff, ((c) >> (8 * 1)) & 0xff, ((c) >> (8 * 0)) & 0xff
 #define ArrayCount(a) (sizeof(a) / sizeof(*(a)))
+
+//Maybe templatize them?
 #define Max(a, b) ((a) > (b) ? (a) : (b))
 #define Min(a, b) ((a) < (b) ? (a) : (b))
 #define Clamp(a, x, b) (Min(Max((a), (x)), (b))
