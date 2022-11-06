@@ -281,6 +281,21 @@ void draw_polygon(SDL_Renderer *renderer, Polygon *p, Uint32 color) {
 	}
 }
 
+void draw_capsule(SDL_Renderer *renderer, Capsule c, Uint32 color)
+{
+	SDL_SetRenderDrawColor(renderer, HexColor(color));
+	draw_ring(renderer, {c.a, c.radius}, color);
+	V2 ab = c.b - c.a;
+	V2 norm = normalizez(V2(-ab.y, ab.x));
+	V2 p1 = c.a + c.radius * norm;
+	V2 p2 = c.b + c.radius * norm;
+	SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
+	p1 = c.a - c.radius * norm;
+	p2 = c.b - c.radius * norm;
+	SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
+	draw_ring(renderer, {c.b, c.radius}, color);
+}
+
 int main(int argc, char **argv)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
@@ -394,18 +409,20 @@ int main(int argc, char **argv)
 		}
 
 		Rect r_player = { player.pos, player.pos + player.size };
-		Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
-		Rect r_enemy = { enemy.pos, enemy.pos + enemy.size };
-
-
+		//Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
+		Capsule c_player;
+		c_player.radius = player.size.x / 5.f;
+		c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
+		c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
+		Rect r_enemy = { enemy.pos  + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f};
 
 		Uint32 collision_color = 0xff0000ff;
 
 		{
 			V2 dist;
 			if (epa(c_player, r_enemy, dist)) {
-				player.pos -= dist / 2.f;
-				enemy.pos += dist / 2.f;
+				player.pos -= dist;
+				//enemy.pos += dist / 2.f;
 				collision_color = 0xffffffff;
 			}
 		}
@@ -442,7 +459,7 @@ int main(int argc, char **argv)
 		SDL_FRect f_enemy = rect_to_sdl_rect(r_enemy);
 		SDL_RenderDrawRectF(renderer, &f_enemy);
 
-		draw_ring(renderer, c_player, collision_color);
+		draw_capsule(renderer, c_player, collision_color);
 
 		draw_polygon(renderer, &poly, collision_color);
 

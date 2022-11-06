@@ -159,6 +159,11 @@ struct Circle {
 	float radius;
 };
 
+struct Capsule {
+	V2 a, b;
+	float radius;
+};
+
 constexpr int MAX_POINTS = 10;
 
 struct Polygon {
@@ -177,6 +182,10 @@ V2 center(Circle a) {
 
 V2 center(Polygon a) {
 	return a.pos;
+}
+
+V2 center(Capsule a) {
+	return (a.a + a.b) / 2;
 }
 
 V2 support(Rect a, V2 dir) {
@@ -198,6 +207,14 @@ V2 support(Polygon a, V2 dir) {
 		}
 	}
 	return a.pos + a.points[index];
+}
+
+V2 support(Capsule a, V2 dir) {
+	dir = normalizez(dir);
+	float da = dot(a.a, dir);
+	float db = dot(a.b, dir);
+	if (da > db) return a.a + dir * a.radius;
+	else return a.b + dir * a.radius;
 }
 
 template<typename ShapeA, typename ShapeB>
