@@ -1,7 +1,7 @@
 #path: "./data/adventurer-spritesheet.png"
 #width: 50
 #height: 37
-#count: 30
+#count: 15
 IDLE: 0 4
 CROUCH: 4 4
 RUN: 8 5

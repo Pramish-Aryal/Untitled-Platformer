@@ -213,8 +213,10 @@ V2 support(Capsule a, V2 dir) {
 	dir = normalizez(dir);
 	float da = dot(a.a, dir);
 	float db = dot(a.b, dir);
-	if (da > db) return a.a + dir * a.radius;
-	else return a.b + dir * a.radius;
+	if (da > db) 
+		return a.a + dir * a.radius;
+	return a.b + dir * a.radius;
+	//return (a.a + dir * a.radius) * (da > db) + (a.b + dir * a.radius) * (da <= db);
 }
 
 template<typename ShapeA, typename ShapeB>
@@ -275,7 +277,7 @@ bool gjk(ShapeA s1, ShapeB s2, V2 *points = 0, int* size = 0)
 }
 
 // TODO: Make proper array handling functions
-constexpr int EPA_MAX_POINTS = 64;
+constexpr int EPA_MAX_POINTS = 256;
 
 template<typename T>
 void insert(T *arr, int &size, int index, T val)

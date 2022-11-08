@@ -400,13 +400,6 @@ int main(int argc, char **argv)
 
 		float speed = 250.f;
 
-		while (accumulator >= dt) {
-			// call into physics
-			player.pos += speed * player.accn * dt;
-			enemy.pos += speed * enemy.accn * dt;
-			t += dt;
-			accumulator -= dt;
-		}
 
 		Rect r_player = { player.pos, player.pos + player.size };
 		//Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
@@ -414,33 +407,42 @@ int main(int argc, char **argv)
 		c_player.radius = player.size.x / 5.f;
 		c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
 		c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
-		Rect r_enemy = { enemy.pos  + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f};
-
+		Rect r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
 		Uint32 collision_color = 0xff0000ff;
 
-		{
-			V2 dist;
-			if (epa(c_player, r_enemy, dist)) {
-				player.pos -= dist;
-				//enemy.pos += dist / 2.f;
-				collision_color = 0xffffffff;
+		while (accumulator >= dt) {
+			// call into physics
+			player.pos += speed * player.accn * dt;
+			enemy.pos += speed * enemy.accn * dt;
+
+
+			{
+				V2 dist;
+				if (epa(c_player, r_enemy, dist)) {
+					player.pos -= dist;
+					//enemy.pos += dist / 2.f;
+					collision_color = 0xffffffff;
+				}
 			}
-		}
-		{
-			V2 dist;
-			if (epa(poly, r_enemy, dist)) {
-				poly.pos -= dist / 2.f;
-				enemy.pos += dist / 2.f;
-				collision_color = 0xff00ffff;
+			{
+				V2 dist;
+				if (epa(poly, r_enemy, dist)) {
+					poly.pos -= dist / 2.f;
+					enemy.pos += dist / 2.f;
+					collision_color = 0xff00ffff;
+				}
 			}
-		}
-		{
-			V2 dist;
-			if (epa(poly, c_player, dist)) {
-				poly.pos -= dist;
-				player.pos += dist / 2.f;
-				collision_color = 0x00ffffff;
+			{
+				V2 dist;
+				if (epa(poly, c_player, dist)) {
+					poly.pos -= dist;
+					player.pos += dist / 2.f;
+					collision_color = 0x00ffffff;
+				}
 			}
+
+			t += dt;
+			accumulator -= dt;
 		}
 
 		SDL_SetRenderDrawColor(renderer, HexColor(0x181818ff));
@@ -462,6 +464,9 @@ int main(int argc, char **argv)
 		draw_capsule(renderer, c_player, collision_color);
 
 		draw_polygon(renderer, &poly, collision_color);
+
+		//visualize capsule support point
+		// draw_ring(renderer, { support(c_player, mouse - c_player.a), 10.f }, 0xff00ffff);
 
 		SDL_RenderPresent(renderer);
 
