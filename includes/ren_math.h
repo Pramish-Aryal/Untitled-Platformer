@@ -68,38 +68,38 @@ struct V3T {
 typedef V3T<float> V3;
 typedef V3T<int> V3i;
 
-template<typename T> V2T<T> operator+(V2T<T> a, V2T<T> b) { return { a.x + b.x, a.y + b.y }; }
-template<typename T> V2T<T> operator-(V2T<T> a, V2T<T> b) { return { a.x - b.x, a.y - b.y }; }
-template<typename T> V2T<T> operator-(V2T<T> a) { return { -a.x, -a.y }; }
-template<typename T> V2T<T> operator*(V2T<T> a, V2T<T> b) { return { a.x * b.x, a.y * b.y }; }
-template<typename T> V2T<T> operator*(V2T<T> a, float b) { return { a.x * b, a.y * b }; }
-template<typename T> V2T<T> operator*(float b, V2T<T> a) { return a * b; }
-template<typename T> V2T<T> operator/(V2T<T> a, V2T<T> b) { return { a.x / b.x, a.y / b.y }; }
-template<typename T> V2T<T> operator/(V2T<T> a, float b) { return { a.x / b, a.y / b }; }
-template<typename T> V2T<T> &operator+=(V2T<T> &a, V2 b) { return a = a + b; }
-template<typename T> V2T<T> &operator-=(V2T<T> &a, V2 b) { return a = a + -b; }
-template<typename T> V2T<T> &operator*=(V2T<T> &a, float b) { return a = a * b; }
-template<typename T> inline float dot(V2T<T> a, V2T<T> b) { return a.x * b.x + a.y * b.y; }
-template<typename T> inline float length_squared(V2T<T> a) { return dot(a, a); }
-template<typename T> inline float length(V2T<T> a) { return sqrtf(dot(a, a)); }
+template<typename T> V2T<T> operator+(V2T<T> a, V2T<T> b)		{ return { a.x + b.x, a.y + b.y }; }
+template<typename T> V2T<T> operator-(V2T<T> a, V2T<T> b)		{ return { a.x - b.x, a.y - b.y }; }
+template<typename T> V2T<T> operator-(V2T<T> a)					{ return { -a.x, -a.y }; }
+template<typename T> V2T<T> operator*(V2T<T> a, V2T<T> b)		{ return { a.x * b.x, a.y * b.y }; }
+template<typename T> V2T<T> operator*(V2T<T> a, float b)		{ return { a.x * b, a.y * b }; }
+template<typename T> V2T<T> operator*(float b, V2T<T> a)		{ return a * b; }
+template<typename T> V2T<T> operator/(V2T<T> a, V2T<T> b)		{ return { a.x / b.x, a.y / b.y }; }
+template<typename T> V2T<T> operator/(V2T<T> a, float b)		{ return { a.x / b, a.y / b }; }
+template<typename T> V2T<T> &operator+=(V2T<T> &a, V2 b)		{ return a = a + b; }
+template<typename T> V2T<T> &operator-=(V2T<T> &a, V2 b)		{ return a = a + -b; }
+template<typename T> V2T<T> &operator*=(V2T<T> &a, float b)		{ return a = a * b; }
+template<typename T> inline float dot(V2T<T> a, V2T<T> b)		{ return a.x * b.x + a.y * b.y; }
+template<typename T> inline float length_squared(V2T<T> a)		{ return dot(a, a); }
+template<typename T> inline float length(V2T<T> a)				{ return sqrtf(dot(a, a)); }
 
-template<typename T> V3T<T> operator+(V3T<T> a, V3T<T> b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
-template<typename T> V3T<T> operator-(V3T<T> a, V3T<T> b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
-template<typename T> V3T<T> operator-(V3T<T> a) { return		{ -a.x, -a.y, -a.z }; }
-template<typename T> V3T<T> operator*(V3T<T> a, V3T<T> b) { return { a.x * b.x, a.y * b.y, a.z * b.z }; }
-template<typename T> V3T<T> operator*(V3T<T> a, float b) { return { a.x * b, a.y * b,  a.z * b }; }
-template<typename T> V3T<T> operator*(float b, V3T<T> a) { return a * b; }
-template<typename T> V3T<T> operator/(V3T<T> a, V3T<T> b) { return { a.x / b.x, a.y / b.y, a.z / b.z }; }
-template<typename T> V3T<T> operator/(V3T<T> a, float b) { return { a.x / b, a.y / b, a.z / b }; }
-template<typename T> V3T<T> &operator+=(V3T<T> &a, V3T<T> b) { return a = a + b; }
-template<typename T> V3T<T> &operator-=(V3T<T> &a, V3T<T> b) { return a = a + -b; }
-template<typename T> V3T<T> &operator*=(V3T<T> &a, float b) { return a = a * b; }
-template<typename T> inline float dot(V3T<T> a, V3T<T> b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-template<typename T> inline float length_squared(V3T<T> a) { return dot(a, a); }
-template<typename T> inline float length(V3T<T> a) { return sqrtf(dot(a, a)); }
-template<typename T> V3T<T> cross(V3T<T> a, V3T<T> b) { return { a.y * b.z - a.z * b.y, b.x * a.z - a.x * b.z, a.x * b.y - a.y * b.x }; }
+template<typename T> V3T<T> operator+(V3T<T> a, V3T<T> b)		{ return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+template<typename T> V3T<T> operator-(V3T<T> a, V3T<T> b)		{ return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+template<typename T> V3T<T> operator-(V3T<T> a)					{ return { -a.x, -a.y, -a.z }; }
+template<typename T> V3T<T> operator*(V3T<T> a, V3T<T> b)		{ return { a.x * b.x, a.y * b.y, a.z * b.z }; }
+template<typename T> V3T<T> operator*(V3T<T> a, float b)		{ return { a.x * b, a.y * b,  a.z * b }; }
+template<typename T> V3T<T> operator*(float b, V3T<T> a)		{ return a * b; }
+template<typename T> V3T<T> operator/(V3T<T> a, V3T<T> b)		{ return { a.x / b.x, a.y / b.y, a.z / b.z }; }
+template<typename T> V3T<T> operator/(V3T<T> a, float b)		{ return { a.x / b, a.y / b, a.z / b }; }
+template<typename T> V3T<T> &operator+=(V3T<T> &a, V3T<T> b)	{ return a = a + b; }
+template<typename T> V3T<T> &operator-=(V3T<T> &a, V3T<T> b)	{ return a = a + -b; }
+template<typename T> V3T<T> &operator*=(V3T<T> &a, float b)		{ return a = a * b; }
+template<typename T> inline float dot(V3T<T> a, V3T<T> b)		{ return a.x * b.x + a.y * b.y + a.z * b.z; }
+template<typename T> inline float length_squared(V3T<T> a)		{ return dot(a, a); }
+template<typename T> inline float length(V3T<T> a)				{ return sqrtf(dot(a, a)); }
+template<typename T> V3T<T> cross(V3T<T> a, V3T<T> b)			{ return { a.y * b.z - a.z * b.y, b.x * a.z - a.x * b.z, a.x * b.y - a.y * b.x }; }
 template<typename T>
-V3T<T> triple_prod(V3T<T> a, V3T<T> b, V3T<T> c) { return cross(cross(a, b), c); } // (A x B) x C
+V3T<T> triple_prod(V3T<T> a, V3T<T> b, V3T<T> c)				{ return cross(cross(a, b), c); } // (A x B) x C
 
 template<typename T>
 inline V2T<T> normalize(V2T<T> a) {
@@ -133,6 +133,8 @@ inline V3T<T> normalizez(V3T<T> a) {
 	return {};
 }
 
+// TODO: Add matrix library
+
 template<typename T>
 T lerp(T a, float t, T b) {
 	return a + (b - a) * t;
@@ -147,7 +149,6 @@ template<typename T>
 T map_range(T r1, T r2, T val, T r3, T r4) {
 	return r3 + (r4 - r3) * (val - r1) / (r2 - r1);
 }
-
 
 struct Rect {
 	V2 min;
@@ -196,14 +197,37 @@ V2 support(Circle a, V2 dir) {
 	return a.pos + a.radius * normalizez(dir);
 }
 
+//V2 support(Polygon a, V2 dir) {
+//	int index = 0;
+//	float max_dot = dot(a.points[0], dir);
+//	for (int i = 1; i < a.size; ++i) {
+//		float dot_val = dot(a.points[i], dir);
+//		if (dot_val > max_dot) {
+//			max_dot = dot_val;
+//			index = i;
+//		}
+//	}
+//	return a.pos + a.points[index];
+//}
+
 V2 support(Polygon a, V2 dir) {
 	int index = 0;
-	float max_dot = dot(a.points[0], dir);
-	for (int i = 1; i < a.size; ++i) {
-		float dot_val = dot(a.points[i], dir);
-		if (dot_val > max_dot) {
-			max_dot = dot_val;
-			index = i;
+	float cur_dot = dot(dir, a.points[index]);
+	int adj_index;
+	float adj_dot;
+	while (true) {
+		adj_index = (index + 1 == a.size ? 0 : index + 1);
+		adj_dot = dot(dir, a.points[adj_index]);
+		if (adj_dot > cur_dot) {
+			cur_dot = adj_dot;
+			index = adj_index;
+		} else {
+			adj_index = (index == 0 ? a.size - 1 : index - 1);
+			adj_dot = dot(dir, a.points[adj_index]);
+			if (cur_dot > adj_dot) 
+				break;
+			cur_dot = adj_dot;
+			index = adj_index;
 		}
 	}
 	return a.pos + a.points[index];
