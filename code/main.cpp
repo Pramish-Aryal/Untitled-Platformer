@@ -145,6 +145,10 @@ Texture load_texture(SDL_Renderer *renderer, const char *filename)
 	return result;
 }
 
+//TODO: Better camera system
+V2 camera;
+V2 resolution;
+
 void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animations, Actor actor)
 {
 	// HACK: Simplify this (or even think up a better solution)
@@ -161,7 +165,7 @@ void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animati
 	src_rect.w = animations[actor.animation_index].width;
 	src_rect.h = animations[actor.animation_index].height;
 
-	SDL_FRect dest_rect = { actor.pos.x, actor.pos.y,  actor.size.x, actor.size.y };
+	SDL_FRect dest_rect = { actor.pos.x - camera.x + resolution.x / 2.f, actor.pos.y - camera.y + resolution.y / 2.f,  actor.size.x, actor.size.y };
 
 	SDL_RenderCopyF(renderer, textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, &src_rect, &dest_rect);
 }
@@ -277,23 +281,23 @@ void draw_polygon(SDL_Renderer *renderer, Polygon *p, Uint32 color) {
 	for (int i = 0; i < p->size; ++i) {
 		V2 p1 = p->pos + p->points[i];
 		V2 p2 = p->pos + p->points[(i + 1) % p->size];
-		SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
+		SDL_RenderDrawLineF(renderer, p1.x - camera.x + resolution.x / 2.f, p1.y - camera.y + resolution.y / 2.f, p2.x - camera.x + resolution.x / 2.f, p2.y - camera.y + resolution.y / 2.f);
 	}
 }
 
 void draw_capsule(SDL_Renderer *renderer, Capsule c, Uint32 color)
 {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));
-	draw_ring(renderer, {c.a, c.radius}, color);
+	draw_ring(renderer, {c.a - camera + resolution / 2.f, c.radius}, color);
 	V2 ab = c.b - c.a;
 	V2 norm = normalizez(V2(-ab.y, ab.x));
 	V2 p1 = c.a + c.radius * norm;
 	V2 p2 = c.b + c.radius * norm;
-	SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
+	SDL_RenderDrawLineF(renderer, p1.x - camera.x + resolution.x / 2.f, p1.y - camera.y + resolution.y / 2.f, p2.x - camera.x + resolution.x / 2.f, p2.y - camera.y + resolution.y / 2.f);
 	p1 = c.a - c.radius * norm;
 	p2 = c.b - c.radius * norm;
-	SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
-	draw_ring(renderer, {c.b, c.radius}, color);
+	SDL_RenderDrawLineF(renderer, p1.x - camera.x + resolution.x / 2.f, p1.y - camera.y + resolution.y / 2.f, p2.x - camera.x + resolution.x / 2.f, p2.y - camera.y + resolution.y / 2.f);
+	draw_ring(renderer, {c.b - camera + resolution / 2.f, c.radius}, color);
 }
 
 int main(int argc, char **argv)
@@ -302,8 +306,7 @@ int main(int argc, char **argv)
 		fatal_error(SDL_GetError());
 	}
 
-	V2 resolution(1280, 720);
-
+	resolution = V2(1280, 720);
 	SDL_Window *window = SDL_CreateWindow("Untitled-Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (int) resolution.x, (int) resolution.y,
 										  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -459,6 +462,8 @@ int main(int argc, char **argv)
 		SDL_SetRenderDrawColor(renderer, HexColor(collision_color));
 
 		SDL_FRect f_enemy = rect_to_sdl_rect(r_enemy);
+		f_enemy.x = f_enemy.x - camera.x + resolution.x / 2.f;
+		f_enemy.y = f_enemy.y - camera.y + resolution.y / 2.f;
 		SDL_RenderDrawRectF(renderer, &f_enemy);
 
 		draw_capsule(renderer, c_player, collision_color);
@@ -480,6 +485,8 @@ int main(int argc, char **argv)
 		char buff[32] = {};
 		SDL_snprintf(buff, sizeof(buff), "%f", 1.f / frame_time);
 		SDL_SetWindowTitle(window, buff);
+
+		camera += (player.pos - camera) * 0.025f;
 
 		accumulator += frame_time;
 	}
