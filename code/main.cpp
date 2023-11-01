@@ -1,14 +1,37 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
 
 // TODO: replace SDL with DirectX
 #include <SDL2/SDL.h>
 
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef float r32;
+typedef double r64;
+typedef ptrdiff_t imem;
+
+
+[[noreturn]] void fatal_error(const char *message, SDL_Window *window = nullptr) {
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", message, window);
+	SDL_Log(message);
+	exit(-1);
+}
+
+void log_error(const char *message, SDL_Window *window = nullptr) {
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", message, window);
+	SDL_Log(message);
+}
+
 #include "defer.h"
 #include "ren_math.h"
+// TODO: Add support for something like Option<T>?
 #include "ren_string.h"
 #include <string.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -22,14 +45,10 @@
 #define Min(a, b) ((a) < (b) ? (a) : (b))
 #define Clamp(a, x, b) (Min(Max((a), (x)), (b))
 
-[[noreturn]] void fatal_error(const char *message, SDL_Window *window = nullptr) {
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal Error", message, window);
-	exit(-1);
-}
 
 struct Texture {
-	int width;
-	int height;
+	i32 width;
+	i32 height;
 	SDL_Texture *tex;
 };
 
@@ -37,7 +56,7 @@ struct Texture {
 struct Input {
 	bool is_down[256];
 	bool was_down[256];
-	uint8_t half_transition[256];
+	u8 half_transition[256];
 };
 
 inline bool is_pressed(Input *input, SDL_Scancode key) {
@@ -75,27 +94,27 @@ enum {
 
 // TODO: Maybe refactor this? Look into Zero's actual animation frame idea
 struct AnimationFrame {
-	int start_frame_index;
-	int count;
-	int texture_index;
-	int current_frame_index = 0;
+	i32 start_frame_index;
+	i32 count;
+	i32 texture_index;
+	i32 current_frame_index = 0;
 };
 
 struct Animation {
 	AnimationFrame *frames;
-	int frame_count;
-	int width;
-	int height;
-	int count_till_update;
-	int counter;
+	i32 frame_count;
+	i32 width;
+	i32 height;
+	i32 count_till_update;
+	i32 counter;
 };
 
 struct Actor {
 	V2 pos;
 	V2 size;
 	V2 accn;
-	int animation_index;
-	int animation_state;
+	i32 animation_index;
+	i32 animation_state;
 };
 
 // TODO: Make this platform dependent?
@@ -106,7 +125,7 @@ String read_entire_file(const char *filename)
 		fatal_error(SDL_GetError(), nullptr);
 	}
 	Sint64 size = rwio->size(rwio);
-	uint8_t *file_content = new uint8_t[size + 1];
+	u8 *file_content = (u8*) SDL_malloc(sizeof(*file_content) * (size + 1));
 	SDL_ClearError();
 	size_t n = rwio->read(rwio, file_content, size, 1);
 	const char *error = SDL_GetError();
@@ -122,12 +141,12 @@ String read_entire_file(const char *filename)
 Texture load_texture(SDL_Renderer *renderer, const char *filename)
 {
 	Texture result = {};
-	int w, h;
+	i32 w, h;
 	String file_content = read_entire_file(filename);
 
-	uint8_t *data = stbi_load_from_memory(file_content.data, (int) file_content.len, &w, &h, nullptr, 4);
+	u8 *data = stbi_load_from_memory(file_content.data, (i32) file_content.len, &w, &h, nullptr, 4);
 
-	delete[] file_content.data;
+	SDL_free(file_content.data);
 
 	if (data == nullptr) {
 		fatal_error(stbi_failure_reason(), nullptr);
@@ -152,12 +171,12 @@ V2 resolution;
 void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animations, Actor actor)
 {
 	// HACK: Simplify this (or even think up a better solution)
-	int frame_index = animations[actor.animation_index].frames[actor.animation_state].current_frame_index +
+	i32 frame_index = animations[actor.animation_index].frames[actor.animation_state].current_frame_index +
 		animations[actor.animation_index].frames[actor.animation_state].start_frame_index;
-	int index_x = (frame_index) %
-		(int) (textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].width / animations[actor.animation_index].width);
-	int index_y = (frame_index) /
-		(int) (textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].width / animations[actor.animation_index].width);
+	i32 index_x = (frame_index) %
+		(i32) (textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].width / animations[actor.animation_index].width);
+	i32 index_y = (frame_index) /
+		(i32) (textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].width / animations[actor.animation_index].width);
 
 	SDL_Rect src_rect = {};
 	src_rect.x = index_x * animations[actor.animation_index].width;
@@ -185,46 +204,64 @@ void update_frame(Animation *animations, Actor actor)
 // TODO: Pool this into an allocator
 // TODO: Turn them into array_view as well
 Animation animations[256];
-int animation_count;
+i32 animation_count;
 AnimationFrame animation_frame_buffer[256] = {};
-int animation_frame_buffer_count = 0;
+i32 animation_frame_buffer_count = 0;
 Texture textures[64];
-int texture_count = 0;
+i32 texture_count = 0;
 
-// TODO: refactor out sscanf_s, strtok with better self implemented String functions, co-routines?
-int parse_animation_file(SDL_Renderer *renderer, const char *file_path)
+bool expect(String* a, u8 c, char *error)
+{
+	if (a->data[0] == c) {
+		string_chop_left(a, 1);
+		return true;
+	}
+	fatal_error(error);
+}
+
+i32 parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 {
 	Animation animation = {};
 	animation.frames = animation_frame_buffer + animation_frame_buffer_count;
 	String animation_file = read_entire_file(file_path);
-	char scratch_buffer[512];
+	String animation_file_start = animation_file;
+	
+	DEFER {
+		SDL_free(animation_file_start.data);
+	};
 	{
-		char *texture_path = 0;
-		char *start = (char *) animation_file.data;
-		char *next = strtok(start, "\r\n");
-		while (next) {
-			if (*next == '#') {
-				next++;
-				if (sscanf_s(next, "path: %s", scratch_buffer, (uint32_t) sizeof(scratch_buffer)) == 1) {
-					texture_path = scratch_buffer + 1;
-					texture_path[strlen(texture_path) - 1] = 0;
-					textures[texture_count++] = load_texture(renderer, texture_path);
-				} else if (sscanf_s(next, "width: %d", &animation.width) == 1);
-				else if (sscanf_s(next, "height: %d", &animation.height) == 1);
-				else if (sscanf_s(next, "count: %d", &animation.count_till_update) == 1);
+		String line = string_chop_by_delim(&animation_file, '\n');
+		while (line.len > 0) {
+			if (line[0] == '#') {
+				String prefix = string_trim(string_chop_by_delim(&line, ' '));
+				string_chop_left(&prefix, 1);
+				line = string_trim(line);
+				if (prefix == String("path:")) {
+					if (expect(&line, '"', "Path must start with a \"")) {
+						String texture_path = string_chop_by_delim(&line, '"');
+						char scratch_buffer[512] = {};	// TODO remove this by making it so that load_texture can work with String as well
+						SDL_memcpy(scratch_buffer, texture_path.data, texture_path.len);
+						textures[texture_count++] = load_texture(renderer, scratch_buffer);
+					}
+				} else if (prefix == String("width:")) { animation.width = string_parse_i32(line); }
+				else if (prefix == String("height:")) { animation.height = string_parse_i32(line); }
+				else if (prefix == String("count:")) { animation.count_till_update = string_parse_i32(line); }
 				else {
 					fatal_error("Unexpected metadata", nullptr);
 				}
 			} else {
-				sscanf_s(next, "%s %d %d", scratch_buffer, (uint32_t) sizeof(scratch_buffer),
-						 &animation.frames[animation.frame_count].start_frame_index,
-						 &animation.frames[animation.frame_count].count);
+				string_chop_by_delim(&line, ':');
+				line = string_trim(line);
+				animation.frames[animation.frame_count].start_frame_index = string_parse_i32(line);
+				string_chop_by_delim(&line, ' ');
+				line = string_trim(line);
+				animation.frames[animation.frame_count].count = string_parse_i32(line);
+
 				animation.frames[animation.frame_count].texture_index = texture_count - 1;
 				animation.frame_count++;
 				animation_frame_buffer_count++;
 			}
-
-			next = strtok(nullptr, "\r\n");
+			line = string_chop_by_delim(&animation_file, '\n');
 		}
 	}
 	animations[animation_count] = animation;
@@ -236,13 +273,13 @@ void draw_ring(SDL_Renderer *renderer, Circle circle, Uint32 color)
 {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));
 
-	float offsetx, offsety, d;
+	r32 offsetx, offsety, d;
 
 	offsetx = 0;
 	offsety = circle.radius;
 	d = circle.radius - 1;
-	float x = circle.pos.x;
-	float y = circle.pos.y;
+	r32 x = circle.pos.x;
+	r32 y = circle.pos.y;
 
 	while (offsety >= offsetx) {
 		SDL_RenderDrawPointF(renderer, x + offsetx, y + offsety);
@@ -268,17 +305,17 @@ void draw_ring(SDL_Renderer *renderer, Circle circle, Uint32 color)
 	}
 }
 
-void make_polygon(Polygon *p, int n, float r, float offset_angle = 0.f) {
+void make_polygon(Polygon *p, i32 n, r32 r, r32 offset_angle = 0.f) {
 	assert(n <= MAX_POINTS);
 	p->size = n;
-	for (int i = 0; i < n; ++i) {
-		p->points[i] = V2(r * cosf(offset_angle + 2 * PI32 * i / (float) n), r * sinf(offset_angle + 2 * PI32 * i / (float) n));
+	for (i32 i = 0; i < n; ++i) {
+		p->points[i] = V2(r * cosf(offset_angle + 2 * PI32 * i / (r32) n), r * sinf(offset_angle + 2 * PI32 * i / (r32) n));
 	}
 }
 
 void draw_polygon(SDL_Renderer *renderer, Polygon *p, Uint32 color) {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));
-	for (int i = 0; i < p->size; ++i) {
+	for (i32 i = 0; i < p->size; ++i) {
 		V2 p1 = p->pos + p->points[i];
 		V2 p2 = p->pos + p->points[(i + 1) % p->size];
 		SDL_RenderDrawLineF(renderer, p1.x - camera.x + resolution.x / 2.f, p1.y - camera.y + resolution.y / 2.f, p2.x - camera.x + resolution.x / 2.f, p2.y - camera.y + resolution.y / 2.f);
@@ -300,24 +337,26 @@ void draw_capsule(SDL_Renderer *renderer, Capsule c, Uint32 color)
 	draw_ring(renderer, {c.b - camera + resolution / 2.f, c.radius}, color);
 }
 
-int main(int argc, char **argv)
+i32 main(i32 argc, char **argv)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
 		fatal_error(SDL_GetError());
 	}
 
 	resolution = V2(1280, 720);
-	SDL_Window *window = SDL_CreateWindow("Untitled-Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (int) resolution.x, (int) resolution.y,
+	SDL_Window *window = SDL_CreateWindow("Untitled-Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (i32) resolution.x, (i32) resolution.y,
 										  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
-	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	// NOTE: Apparently using SDL_RENDERER_ACCELERATED is bad because it forces us to create a hardware
+	// renderer, and just crash if it can't instead of falling back to a software renderer.
+	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
 	if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND) < 0) {
 		fatal_error(SDL_GetError(), nullptr);
 	}
 	SDL_ShowWindow(window);
 
 	bool is_running = true;
-	uint64_t last_ms = SDL_GetTicks64();
-	uint64_t start_ms = SDL_GetTicks64();
+	u64 last_ms = SDL_GetTicks64();
+	u64 start_ms = SDL_GetTicks64();
 
 	Input input = {};
 	Actor player = {};
@@ -331,12 +370,12 @@ int main(int argc, char **argv)
 
 	enemy.pos = resolution / 2 - enemy.size / 2;
 
-	float t = 0;
-	float dt = 0.01f;
+	r32 t = 0;
+	r32 dt = 0.01f;
 
-	uint64_t last_counter = SDL_GetPerformanceCounter();
-	const uint64_t query_perf_freq = SDL_GetPerformanceFrequency();
-	float accumulator = dt;
+	u64 last_counter = SDL_GetPerformanceCounter();
+	const u64 query_perf_freq = SDL_GetPerformanceFrequency();
+	r32 accumulator = dt;
 
 	Polygon poly;
 	make_polygon(&poly, 5, 50);
@@ -345,15 +384,15 @@ int main(int argc, char **argv)
 
 	while (is_running) {
 
-		memcpy(input.was_down, input.is_down, sizeof(input.is_down));
+		SDL_memcpy(input.was_down, input.is_down, sizeof(input.is_down));
 		// memset(input.is_down, 0, sizeof(input.is_down));
-		memset(input.half_transition, 0, sizeof(input.half_transition));
+		SDL_memset(input.half_transition, 0, sizeof(input.half_transition));
 
 		V2 mouse;
 		{
-			int mouse_x, mouse_y;
+			i32 mouse_x, mouse_y;
 			SDL_GetMouseState(&mouse_x, &mouse_y);
-			mouse = { (float) mouse_x, (float) mouse_y };
+			mouse = { (r32) mouse_x, (r32) mouse_y };
 		}
 
 		SDL_Event event;
@@ -401,7 +440,7 @@ int main(int argc, char **argv)
 		player.accn = normalizez(player.accn);
 		enemy.accn = normalizez(enemy.accn);
 
-		float speed = 250.f;
+		r32 speed = 250.f;
 
 
 		Rect r_player = { player.pos, player.pos + player.size };
@@ -478,8 +517,8 @@ int main(int argc, char **argv)
 		update_frame(animations, player);
 		update_frame(animations, enemy);
 
-		uint64_t current_counter = SDL_GetPerformanceCounter();
-		float frame_time = ((1000000.0f * (current_counter - last_counter)) / (float) query_perf_freq) / 1000000.0f;
+		u64 current_counter = SDL_GetPerformanceCounter();
+		r32 frame_time = ((1000000.0f * (current_counter - last_counter)) / (r32) query_perf_freq) / 1000000.0f;
 		last_counter = current_counter;
 
 		char buff[32] = {};
