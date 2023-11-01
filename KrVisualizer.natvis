@@ -2,14 +2,14 @@
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
 
 	<Type Name="String">
-		<Intrinsic Name="length" Expression="length" />
+		<Intrinsic Name="len" Expression="len" />
 		<Intrinsic Name="data" Expression="data" />
-		<DisplayString>{data,[length]}</DisplayString>
-		<StringView>data,[length]</StringView>
+		<DisplayString>{data,[len]}</DisplayString>
+		<StringView>data,[len]</StringView>
 		<Expand>
-			<Item Name="[length]" ExcludeView="simple">length</Item>
+			<Item Name="[len]" ExcludeView="simple">len</Item>
 			<ArrayItems>
-				<Size>length</Size>
+				<Size>len</Size>
 				<ValuePointer>data</ValuePointer>
 			</ArrayItems>
 		</Expand>
