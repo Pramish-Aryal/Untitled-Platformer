@@ -1,4 +1,21 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+﻿/*
+	TODOs:
+	* Implement Memory Allocators
+	* Implement Dynamic Arrays
+	* Reimplement the Collision System, I don't like how its setup right now.
+		- GJK is amazing, but EPA is sus.
+		- May change the entire physics system to somethin
+	* Add a broad phase and a narrow phase in the collision system
+		- Can't afford to call GJK between each pair of existing colliders
+		- Use something akin to an AABB (or even quad trees in the future) to get list 
+		  of possible collisions and finally test the collisions and resolve if required
+	* Tileset editor or maybe just a level editor
+		- maybe use bitmasks to make them blend automatically, something akin to cellular 
+		  automata by counting the neighbours.
+	* Re-think the animation system
+*/
+
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdint.h>
 #include <math.h>
 
@@ -249,7 +266,7 @@ i32 parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 				else {
 					fatal_error("Unexpected metadata", nullptr);
 				}
-			} else {
+			} else if (line[0] != '\r') {
 				string_chop_by_delim(&line, ':');
 				line = string_trim(line);
 				animation.frames[animation.frame_count].start_frame_index = string_parse_i32(line);
@@ -368,7 +385,7 @@ i32 main(i32 argc, char **argv)
 	enemy.animation_index = parse_animation_file(renderer, u8"./data/enemy.anims");
 	enemy.size = { 2.f * animations[enemy.animation_index].width, 2.f * animations[enemy.animation_index].height };
 
-	enemy.pos = resolution / 2 - enemy.size / 2;
+	enemy.pos = (resolution - enemy.size) / 2;
 
 	r32 t = 0;
 	r32 dt = 0.01f;
@@ -378,7 +395,7 @@ i32 main(i32 argc, char **argv)
 	r32 accumulator = dt;
 
 	Polygon poly;
-	make_polygon(&poly, 5, 50);
+	make_polygon(&poly, MAX_POINTS, 50);
 	//poly.pos = V2(mouse.x, mouse.y);
 	poly.pos = resolution * 0.25f;
 
@@ -509,9 +526,6 @@ i32 main(i32 argc, char **argv)
 
 		draw_polygon(renderer, &poly, collision_color);
 
-		//visualize capsule support point
-		// draw_ring(renderer, { support(c_player, mouse - c_player.a), 10.f }, 0xff00ffff);
-
 		SDL_RenderPresent(renderer);
 
 		update_frame(animations, player);
@@ -525,8 +539,9 @@ i32 main(i32 argc, char **argv)
 		SDL_snprintf(buff, sizeof(buff), "%f", 1.f / frame_time);
 		SDL_SetWindowTitle(window, buff);
 
-		camera += (player.pos - camera) * 0.025f;
-
+		//camera += (player.pos - camera) * 0.025f;
+		camera.x = lerp(camera.x, 0.025f, player.pos.x);
+		camera.y = lerp(camera.y, 0.025f, player.pos.y);
 		accumulator += frame_time;
 	}
 
