@@ -4,8 +4,8 @@
 #include <math.h>
 #include <assert.h>
 
-#define PI32 3.14159265359f
-#define PI64 3.14159265359
+constexpr float PI32 = 3.14159265359f;
+constexpr double PI64 = 3.14159265358979323846;
 
 template<typename T>
 struct V2T {

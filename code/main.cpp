@@ -2,9 +2,11 @@
 	TODOs:
 	* Implement Memory Allocators
 	* Implement Dynamic Arrays
-	* Reimplement the Collision System, I don't like how its setup right now.
-		- GJK is amazing, but EPA is sus.
-		- May change the entire physics system to somethin
+	* ~~Reimplement the Collision System, I don't like how its setup right now.~~
+		~~- GJK is amazing, but EPA is sus.~~
+		~~- May change the entire physics system to something else, maybe SAT?~~
+	* Nope GJK and EPA are amazing, both work as expected, I was the idiot, forgot to
+	  update the colliders after changing their positions.
 	* Add a broad phase and a narrow phase in the collision system
 		- Can't afford to call GJK between each pair of existing colliders
 		- Use something akin to an AABB (or even quad trees in the future) to get list 
@@ -12,7 +14,13 @@
 	* Tileset editor or maybe just a level editor
 		- maybe use bitmasks to make them blend automatically, something akin to cellular 
 		  automata by counting the neighbours.
-	* Re-think the animation system
+	* Re-think the animation system: Maybe use animation queues?
+	  - essentially each animation knows if it is a one shot thing or not, 
+	    as well as how much time it has to be played for and possibly if it can be interrupted
+	  - so if we want to play an animation, we simply queue it up in the buffer of the enumeration 
+	    values on which animation to play next
+	  - then while updating the animation, if it is interruptable, we interrupt it, if its a one shot we
+	    switch back to the idle animation, and finally if its a loopable animation, we just replay it.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -132,6 +140,9 @@ struct Actor {
 	V2 accn;
 	i32 animation_index;
 	i32 animation_state;
+	r32 attack_timer;
+	bool flipped;
+	bool attacking;
 };
 
 // TODO: Make this platform dependent?
@@ -203,7 +214,12 @@ void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animati
 
 	SDL_FRect dest_rect = { actor.pos.x - camera.x + resolution.x / 2.f, actor.pos.y - camera.y + resolution.y / 2.f,  actor.size.x, actor.size.y };
 
-	SDL_RenderCopyF(renderer, textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, &src_rect, &dest_rect);
+	//SDL_RenderCopyF(renderer, textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, &src_rect, &dest_rect);
+	SDL_RenderCopyExF(renderer, 
+					  textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, 
+					  &src_rect, &dest_rect,
+					  0, nullptr, 
+					  actor.flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
 }
 
 void update_frame(Animation *animations, Actor actor)
@@ -399,6 +415,8 @@ i32 main(i32 argc, char **argv)
 	//poly.pos = V2(mouse.x, mouse.y);
 	poly.pos = resolution * 0.25f;
 
+	bool left_button_clicked = false;
+
 	while (is_running) {
 
 		SDL_memcpy(input.was_down, input.is_down, sizeof(input.is_down));
@@ -408,7 +426,8 @@ i32 main(i32 argc, char **argv)
 		V2 mouse;
 		{
 			i32 mouse_x, mouse_y;
-			SDL_GetMouseState(&mouse_x, &mouse_y);
+
+			left_button_clicked = SDL_GetMouseState(&mouse_x, &mouse_y) & SDL_BUTTON_LMASK;
 			mouse = { (r32) mouse_x, (r32) mouse_y };
 		}
 
@@ -427,6 +446,10 @@ i32 main(i32 argc, char **argv)
 
 					input.is_down[event.key.keysym.scancode] = true;
 					input.half_transition[event.key.keysym.scancode]++;
+				} break;
+
+				case SDL_MOUSEBUTTONDOWN:
+				{
 				} break;
 
 				case SDL_KEYUP:
@@ -450,7 +473,7 @@ i32 main(i32 argc, char **argv)
 		enemy.accn.y += is_held(&input, SDL_SCANCODE_DOWN);
 
 		if (is_pressed(&input, SDL_SCANCODE_SPACE)) {
-			player.animation_state = (player.animation_state + 1) % PLAYER_ANIMATION_COUNT;
+			// player.animation_state = (player.animation_state + 1) % PLAYER_ANIMATION_COUNT;
 			enemy.animation_state = (enemy.animation_state + 1) % ENEMY_ANIMATION_COUNT;
 		}
 
@@ -459,47 +482,96 @@ i32 main(i32 argc, char **argv)
 
 		r32 speed = 250.f;
 
+		if (!player.attacking) {
+			if (player.accn.x < 0) {
+				player.animation_state = PLAYER_ANIMATION_RUN;
+				player.flipped = true;
+			} else if (player.accn.x > 0) {
+				player.animation_state = PLAYER_ANIMATION_RUN;
+				player.flipped = false;
+			} else {
+				player.animation_state = PLAYER_ANIMATION_IDLE;
+			}
+		}
+
+		static int combo = -1;
+		if (left_button_clicked || is_pressed(&input, SDL_SCANCODE_E)) {
+			combo = (combo + 1) % 3;
+			player.attacking = true;
+			player.attack_timer = 0.5f;
+			player.animation_state = PLAYER_ANIMATION_ATK1 + combo;
+		}
+
+
+		if (player.attack_timer > 0) {
+			player.attack_timer -= dt;
+
+		} else {
+			player.attack_timer = 0;
+			player.attacking = false;
+			combo = -1;
+		}
+
+		// TODO: generate sword collider and make others get damaged if appropriate
+		if (player.attacking) {
+
+		}
 
 		Rect r_player = { player.pos, player.pos + player.size };
-		//Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
+		Rect r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
 		Capsule c_player;
 		c_player.radius = player.size.x / 5.f;
 		c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
 		c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
-		Rect r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
+		//Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
 		Uint32 collision_color = 0xff0000ff;
 
 		while (accumulator >= dt) {
 			// call into physics
 			player.pos += speed * player.accn * dt;
-			enemy.pos += speed * enemy.accn * dt;
 
+			// forgot to update the player capsule after moving woops
+			c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
+			c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
+			r_player = { player.pos, player.pos + player.size };
+
+			// forgot to update the enemy rect after moving woops
+			enemy.pos += speed * enemy.accn * dt;
+			r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
 
 			{
 				V2 dist;
+				
 				if (epa(c_player, r_enemy, dist)) {
-					player.pos -= dist;
-					//enemy.pos += dist / 2.f;
+					player.pos -= dist / 2;
+					enemy.pos += dist / 2;
+					// Updating the player capsule if we've collided
+					c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
+					c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
+					r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
+
 					collision_color = 0xffffffff;
 				}
 			}
 			{
 				V2 dist;
 				if (epa(poly, r_enemy, dist)) {
-					poly.pos -= dist / 2.f;
-					enemy.pos += dist / 2.f;
+					poly.pos -= dist / 2;	// we're directly updating the polygon's position, so don't have to do anything else
+					enemy.pos += dist / 2;
+					r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
 					collision_color = 0xff00ffff;
 				}
 			}
 			{
 				V2 dist;
 				if (epa(poly, c_player, dist)) {
-					poly.pos -= dist;
-					player.pos += dist / 2.f;
+					poly.pos -= dist / 2;	// same here
+					player.pos += dist / 2;	// same here
+					c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
+					c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
 					collision_color = 0x00ffffff;
 				}
 			}
-
 			t += dt;
 			accumulator -= dt;
 		}
