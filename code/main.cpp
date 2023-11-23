@@ -19,6 +19,8 @@
 	    values on which animation to play next
 	  - then while updating the animation, if it is interruptable, we interrupt it, if its a one shot we
 	    switch back to the idle animation, and finally if its a loopable animation, we just replay it.
+	* Re think the InputAction buffer.
+	* Font rendering
 */
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -57,10 +59,19 @@ void log_error(const char *message, SDL_Window *window = nullptr) {
 // TODO: Add support for something like Option<T>?
 #include "ren_string.h"
 #include <string.h>
+
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_write.h>
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
 #define HexColor(c) ((c) >> (8 * 3)) & 0xff, ((c) >> (8 * 2)) & 0xff, ((c) >> (8 * 1)) & 0xff, ((c) >> (8 * 0)) & 0xff
+#define UnHexColor(c, r, g, b, a) r = ((c) >> 24) & 0xff; g = ((c) >> 16) & 0xff; b = ((c) >> 8) & 0xff; (a) = (c) & 0xff
 #define ArrayCount(a) (sizeof(a) / sizeof(*(a)))
 
 //Maybe templatize them?
@@ -180,7 +191,12 @@ i32 texture_count = 0;
 InputAction buffer_actions[16];
 int buffer_action_size = 0;
 
+//TODO: Better camera system
+V2 camera;
+V2 resolution;
 
+////////////            globals
+/////////////////////////////////////////////////////////
 
 // TODO: Make this platform dependent?
 String read_entire_file(const char *filename)
@@ -229,11 +245,7 @@ Texture load_texture(SDL_Renderer *renderer, const char *filename)
 	return result;
 }
 
-//TODO: Better camera system
-V2 camera;
-V2 resolution;
-
-void display_frame(SDL_Renderer *renderer, Texture *textures,Actor* actor)
+void display_frame(SDL_Renderer *renderer, Texture *textures, Actor* actor)
 {
 	Animation *animation = actor->animation;
 	// HACK: Simplify this (or even think up a better solution)
@@ -279,6 +291,144 @@ void update_frame(Actor* actor)
 	}
 }
 
+////////////////////////////////////////
+//				STB FONT
+
+typedef struct {
+	stbtt_fontinfo *info;
+	stbtt_packedchar *chars;
+	SDL_Texture *atlas;
+	int texture_size;
+	r32 size;
+	r32 scale;
+	int ascent;
+	int baseline;
+} Font;
+
+Font *load_font(SDL_Renderer *renderer, const char *filename, r32 size) {
+	String font_file = read_entire_file(filename);
+
+	Defer( SDL_free(font_file.data); );
+
+	Font *font = (Font *) SDL_calloc(sizeof(Font), 1);
+	if (!font) return nullptr;
+	font->info = (stbtt_fontinfo *) SDL_malloc(sizeof(stbtt_fontinfo));
+	font->chars = (stbtt_packedchar *) SDL_malloc(sizeof(stbtt_packedchar) * 96);
+	if (stbtt_InitFont(font->info, font_file.data, 0) == 0) {
+		if (font) SDL_free(font);
+		if (font->info) SDL_free(font->info);
+		if (font->chars) SDL_free(font->chars);
+		return nullptr;
+	}
+
+	font->texture_size = 32; // gradually build up a texture
+	u8 *bitmap = nullptr;
+	while (1) {
+		bitmap = (u8 *) SDL_malloc(font->texture_size * font->texture_size);
+		stbtt_pack_context pack_context;
+		stbtt_PackBegin(&pack_context, bitmap, font->texture_size, font->texture_size, 0, 1, nullptr);
+		stbtt_PackSetOversampling(&pack_context, 1, 1);
+		if (!stbtt_PackFontRange(&pack_context, font_file.data, 0, size, ' ', 127 - ' ', font->chars)) {
+			SDL_free(bitmap);
+			stbtt_PackEnd(&pack_context);
+			font->texture_size *= 2;
+		} else {
+			stbtt_PackEnd(&pack_context);
+			break;
+		}
+	}
+
+	font->atlas = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, font->texture_size, font->texture_size);
+	SDL_SetTextureBlendMode(font->atlas, SDL_BLENDMODE_BLEND);
+
+	u32 *pixels = (u32 *) SDL_malloc(font->texture_size * font->texture_size * sizeof(u32));
+	Defer(SDL_free(pixels));
+	static SDL_PixelFormat *format = NULL;
+	if (format == NULL) format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA32);
+	for (int i = 0; i < font->texture_size * font->texture_size; i++) {
+		pixels[i] = SDL_MapRGBA(format, 0xff, 0xff, 0xff, bitmap[i]);
+	}
+	SDL_UpdateTexture(font->atlas, NULL, pixels, font->texture_size * sizeof(u32));
+	SDL_free(bitmap);
+
+	font->scale = stbtt_ScaleForPixelHeight(font->info, size);
+	stbtt_GetFontVMetrics(font->info, &font->ascent, 0, 0);
+	font->baseline = (int) (font->ascent * font->scale);
+
+	return font;
+}
+
+void unload_font(Font *font) {
+	if (font->atlas) SDL_DestroyTexture(font->atlas);
+	if (font->info) SDL_free(font->info);
+	if (font->chars) SDL_free(font->chars);
+	SDL_free(font);
+}
+
+void render_text(SDL_Renderer *renderer, Font *font, r32 x, r32 y, String text, u32 color) {
+	Uint8 r, g, b, a;
+	UnHexColor(color, r, g, b, a);
+	SDL_SetTextureColorMod(font->atlas, r, g, b);
+	SDL_SetTextureAlphaMod(font->atlas, a);
+	for (int i = 0; i < text.len; i++) {
+		if (text[i] >= ' ' && text[i] < 128) {
+			stbtt_packedchar *info = &font->chars[text[i] - ' '];
+			SDL_Rect src_rect = { info->x0, info->y0, info->x1 - info->x0, info->y1 - info->y0 };
+			//SDL_FRect dst_rect = { x + info->xoff, y + info->yoff, (r32) info->x1 - info->x0, (r32) info->y1 - info->y0 };
+			SDL_FRect dst_rect = { x + info->xoff, y + info->yoff, info->xoff2 - info->xoff, info->yoff2 - info->yoff };
+			dst_rect.y += font->baseline;
+			SDL_RenderCopyF(renderer, font->atlas, &src_rect, &dst_rect);
+			x += info->xadvance;
+		}
+	}
+}
+
+void render_text_fit_width(SDL_Renderer *renderer, Font *font, r32 x0, r32 y0, String text, u32 color, r32 fit_width) {
+	Uint8 r, g, b, a;
+	UnHexColor(color, r, g, b, a);
+	SDL_SetTextureColorMod(font->atlas, r, g, b);
+	SDL_SetTextureAlphaMod(font->atlas, a);
+	r32 x = x0;
+	r32 y = y0;
+
+	for (int i = 0; i < text.len; i++) {
+		if (text[i] >= ' ' && text[i] < 128) {
+			stbtt_packedchar *info = &font->chars[text[i] - ' '];
+			SDL_Rect src_rect = { info->x0, info->y0, info->x1 - info->x0, info->y1 - info->y0 };
+			if (fit_width < info->x1 - info->x0) {
+				//SDL_Log("Text doesn't fit in the given dimension");
+				return;
+			}
+			SDL_FRect dst_rect = { x + info->xoff, y + info->yoff, info->xoff2 - info->xoff, info->yoff2 - info->yoff };
+			dst_rect.y += font->baseline;
+			SDL_RenderCopyF(renderer, font->atlas, &src_rect, &dst_rect);
+			
+			// TODO: think about this
+			if (x + 2.f * info->xadvance + info->xoff < x0 + fit_width) {
+				x += info->xadvance;
+			} else {
+				y += 1.5f * font->baseline;
+				x = x0;
+			}
+		}
+	}
+}
+
+r32 compute_text_width(Font *font, const char *text) {
+	r32 width = 0;
+	for (int i = 0; text[i]; i++) {
+		if (text[i] >= ' ' && text[i] < 128) {
+			stbtt_packedchar *info = &font->chars[text[i] - ' '];
+			width += info->xadvance;
+		}
+	}
+	return width;
+}
+
+//				STB Font
+////////////////////////////////////////
+
+
 bool expect(String* a, u8 c, const char *error)
 {
 	if (a->data[0] == c) {
@@ -294,6 +444,8 @@ Animation* parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 	animation.frames = animation_frame_buffer + animation_frame_buffer_count;
 	String animation_file = read_entire_file(file_path);
 	String animation_file_start = animation_file;
+
+	Defer(	SDL_free(animation_file_start.data); );
 
 	{
 		String line = string_chop_by_delim(&animation_file, '\n');
@@ -334,14 +486,13 @@ Animation* parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 			line = string_chop_by_delim(&animation_file, '\n');
 		}
 	}
-	SDL_free(animation_file_start.data);
 
 	animations[animation_count] = animation;
 	return &animations[animation_count++];
 }
 
 // TODO: YEET
-void draw_ring(SDL_Renderer *renderer, Circle circle, Uint32 color)
+void draw_ring(SDL_Renderer *renderer, Circle circle, u32 color)
 {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));
 
@@ -385,7 +536,7 @@ void make_polygon(Polygon *p, i32 n, r32 r, r32 offset_angle = 0.f) {
 	}
 }
 
-void draw_polygon(SDL_Renderer *renderer, Polygon *p, Uint32 color) {
+void draw_polygon(SDL_Renderer *renderer, Polygon *p, u32 color) {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));
 	for (i32 i = 0; i < p->size; ++i) {
 		V2 p1 = p->pos + p->points[i];
@@ -394,7 +545,7 @@ void draw_polygon(SDL_Renderer *renderer, Polygon *p, Uint32 color) {
 	}
 }
 
-void draw_capsule(SDL_Renderer *renderer, Capsule c, Uint32 color)
+void draw_capsule(SDL_Renderer *renderer, Capsule c, u32 color)
 {
 	SDL_SetRenderDrawColor(renderer, HexColor(color));
 	draw_ring(renderer, {c.a - camera + resolution / 2.f, c.radius}, color);
@@ -473,15 +624,20 @@ i32 main(i32 argc, char **argv)
 	r32 accumulator = dt;
 
 	Polygon poly;
-	make_polygon(&poly, MAX_POINTS, 50);
+	make_polygon(&poly, 3, 500);
 	//poly.pos = V2(mouse.x, mouse.y);
-	poly.pos = resolution * 0.25f;
+	poly.pos = V2(0, 150);
 
 	bool left_button_is_down = false;
+	bool right_button_is_down = false;
 	bool left_button_was_down = false;
+	bool right_button_was_down = false;
 	r32 frame_time = 1/60.f;
 
 	r32 total_frame_time = 0;
+
+
+	Font *font = load_font(renderer, "./data/fonts/Swansea-q3pd.ttf", 32);
 
 	while (is_running) {
 
@@ -490,6 +646,7 @@ i32 main(i32 argc, char **argv)
 		SDL_memset(input.half_transition, 0, sizeof(input.half_transition));
 
 		left_button_was_down = left_button_is_down;
+		right_button_was_down = right_button_is_down;
 
 		total_frame_time += frame_time;
 
@@ -520,11 +677,17 @@ i32 main(i32 argc, char **argv)
 				} break;
 
 				case SDL_MOUSEBUTTONDOWN: {
-					left_button_is_down = true;
+					if (event.button.button == SDL_BUTTON_LEFT)
+						left_button_is_down = true;
+					if (event.button.button == SDL_BUTTON_RIGHT)
+						right_button_is_down = true;
 				} break;
 
 				case SDL_MOUSEBUTTONUP: {
-					left_button_is_down = false;
+					if (event.button.button == SDL_BUTTON_LEFT)
+						left_button_is_down = false;
+					if (event.button.button == SDL_BUTTON_RIGHT)
+						right_button_is_down = false;
 				} break;
 
 				case SDL_KEYUP:
@@ -676,7 +839,7 @@ i32 main(i32 argc, char **argv)
 		c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
 		c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
 		//Circle c_player = { player.pos + player.size / 2.f, player.size.y / 2.f };
-		Uint32 collision_color = 0xff0000ff;
+		u32 collision_color = 0xff0000ff;
 
 		while (accumulator >= dt) {
 			// call into physics
@@ -734,7 +897,6 @@ i32 main(i32 argc, char **argv)
 		SDL_RenderClear(renderer);
 
 		display_frame(renderer, textures, &player);
-
 		display_frame(renderer, textures, &enemy);
 
 		auto rect_to_sdl_rect = [] (Rect a) -> SDL_FRect {
@@ -752,6 +914,34 @@ i32 main(i32 argc, char **argv)
 
 		draw_polygon(renderer, &poly, collision_color);
 
+		static SDL_FRect text_rect = {.w = 100};
+
+
+		//render_text(renderer, font, text_rect.x, text_rect.h, "This is a test", 0x7f0000ff);
+		render_text_fit_width(renderer, font, text_rect.x, text_rect.y, "The quick brown fox jumps over the lazy dog", 0x7f0000ff, text_rect.w);
+		{
+			char buff[32] = {};
+			SDL_snprintf(buff, sizeof(buff), "%f", text_rect.w);
+			render_text(renderer, font, 0, 0, String(buff, strlen(buff)), 0x7f0000ff);
+		}
+		//render_text(renderer, font, 0, font->size, "abcdefghijklmnopqrstuvwxyz");
+		// render the atlas to check its content
+		//SDL_Rect dest = {0, 0, font->texture_size, font->texture_size };
+		//SDL_RenderCopy(renderer, font->atlas, &dest, &dest);
+
+		if (left_button_is_down) {
+			text_rect.x = mouse.x;
+			text_rect.y = mouse.y;
+		}
+
+		if (right_button_is_down) {
+			text_rect.w = mouse.x - text_rect.x;
+			text_rect.h = mouse.y - text_rect.y;
+		}
+
+		SDL_SetRenderDrawColor(renderer, HexColor(0xffffffff));
+		SDL_RenderDrawRectF(renderer, &text_rect);
+		
 		SDL_RenderPresent(renderer);
 
 
