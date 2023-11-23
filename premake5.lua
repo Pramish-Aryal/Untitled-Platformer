@@ -7,7 +7,7 @@
 	project ("game")
 	kind ("ConsoleApp")
 	language ("C++")
-	cppdialect ("C++17")
+	cppdialect ("C++20")
 	-- Build Executable
 	targetdir ("build/%{cfg.buildcfg}/%{cfg.architecture}")
 	-- Intermediate Files

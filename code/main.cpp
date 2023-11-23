@@ -2,11 +2,9 @@
 	TODOs:
 	* Implement Memory Allocators
 	* Implement Dynamic Arrays
-	* ~~Reimplement the Collision System, I don't like how its setup right now.~~
-		~~- GJK is amazing, but EPA is sus.~~
-		~~- May change the entire physics system to something else, maybe SAT?~~
-	* Nope GJK and EPA are amazing, both work as expected, I was the idiot, forgot to
-	  update the colliders after changing their positions.
+	* Fix the collision order, apparently we're supposed to move the first guy with the penetration
+	  vector amount. Right now I'm handling it by adding half the distance on both objects, but 
+	  that's not good because we can't be moving the grounds and stuff.
 	* Add a broad phase and a narrow phase in the collision system
 		- Can't afford to call GJK between each pair of existing colliders
 		- Use something akin to an AABB (or even quad trees in the future) to get list 
@@ -106,7 +104,7 @@ enum {
 	PLAYER_ANIMATION_ATK2,
 	PLAYER_ANIMATION_ATK3,
 
-	PLAYER_ANIMATION_COUNT
+	COUNT_PLAYER_ANIMATION
 };
 
 enum {
@@ -114,7 +112,7 @@ enum {
 	ENEMY_ANIMATION_WALK,
 	ENEMY_ANIMATION_ATK,
 
-	ENEMY_ANIMATION_COUNT
+	COUNT_ENEMY_ANIMATION
 };
 
 // TODO: Maybe refactor this? Look into Zero's actual animation frame idea
@@ -122,7 +120,6 @@ struct AnimationFrame {
 	i32 start_frame_index;
 	i32 count;
 	i32 texture_index;
-	i32 current_frame_index = 0;
 };
 
 struct Animation {
@@ -137,13 +134,53 @@ struct Animation {
 struct Actor {
 	V2 pos;
 	V2 size;
+	V2 vel;
 	V2 accn;
-	i32 animation_index;
+	// animation data
+	Animation *animation;
 	i32 animation_state;
-	r32 attack_timer;
+	i32 current_animation_frame;
+	i32 combo; // only used for the player
+	i32 idle_animation; // default animation to return to after one shot
+	bool one_shot;
 	bool flipped;
-	bool attacking;
 };
+
+enum Action {
+	ACTION_NONE,
+	ACTION_MOVE_LEFT,
+	ACTION_MOVE_RIGHT,
+	ACTION_MOVE_UP,
+	ACTION_MOVE_DOWN,
+	ACTION_ATTACK,
+	ACTION_JUMP,
+	ACTION_CROUCH,
+
+	COUNT_ACTION,
+};
+
+struct InputAction {
+	Action action;
+	r32 duration;
+	bool consumed;
+};
+
+/////////////////////////////////////////////////////////
+////////////            globals
+
+// TODO: Pool this into an allocator
+// TODO: Turn them into array_view as well
+Animation animations[256];
+i32 animation_count;
+AnimationFrame animation_frame_buffer[256] = {};
+i32 animation_frame_buffer_count = 0;
+Texture textures[64];
+i32 texture_count = 0;
+
+InputAction buffer_actions[16];
+int buffer_action_size = 0;
+
+
 
 // TODO: Make this platform dependent?
 String read_entire_file(const char *filename)
@@ -196,54 +233,53 @@ Texture load_texture(SDL_Renderer *renderer, const char *filename)
 V2 camera;
 V2 resolution;
 
-void display_frame(SDL_Renderer *renderer, Texture *textures, Animation *animations, Actor actor)
+void display_frame(SDL_Renderer *renderer, Texture *textures,Actor* actor)
 {
+	Animation *animation = actor->animation;
 	// HACK: Simplify this (or even think up a better solution)
-	i32 frame_index = animations[actor.animation_index].frames[actor.animation_state].current_frame_index +
-		animations[actor.animation_index].frames[actor.animation_state].start_frame_index;
+	i32 frame_index = actor->current_animation_frame +
+		animation->frames[actor->animation_state].start_frame_index;
 	i32 index_x = (frame_index) %
-		(i32) (textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].width / animations[actor.animation_index].width);
+		(i32) (textures[animation->frames[actor->animation_state].texture_index].width / animation->width);
 	i32 index_y = (frame_index) /
-		(i32) (textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].width / animations[actor.animation_index].width);
+		(i32) (textures[animation->frames[actor->animation_state].texture_index].width / animation->width);
 
 	SDL_Rect src_rect = {};
-	src_rect.x = index_x * animations[actor.animation_index].width;
-	src_rect.y = index_y * animations[actor.animation_index].height;
-	src_rect.w = animations[actor.animation_index].width;
-	src_rect.h = animations[actor.animation_index].height;
+	src_rect.x = index_x * animation->width;
+	src_rect.y = index_y * animation->height;
+	src_rect.w = animation->width;
+	src_rect.h = animation->height;
 
-	SDL_FRect dest_rect = { actor.pos.x - camera.x + resolution.x / 2.f, actor.pos.y - camera.y + resolution.y / 2.f,  actor.size.x, actor.size.y };
+	SDL_FRect dest_rect = { actor->pos.x - camera.x + resolution.x / 2.f, actor->pos.y - camera.y + resolution.y / 2.f,  actor->size.x, actor->size.y };
 
-	//SDL_RenderCopyF(renderer, textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, &src_rect, &dest_rect);
+	//SDL_RenderCopyF(renderer, textures[animation->frames[actor->animation_state].texture_index].tex, &src_rect, &dest_rect);
 	SDL_RenderCopyExF(renderer, 
-					  textures[animations[actor.animation_index].frames[actor.animation_state].texture_index].tex, 
+					  textures[animation->frames[actor->animation_state].texture_index].tex, 
 					  &src_rect, &dest_rect,
 					  0, nullptr, 
-					  actor.flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+					  actor->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
 }
 
-void update_frame(Animation *animations, Actor actor)
+void update_frame(Actor* actor)
 {
-	if (animations[actor.animation_index].counter > animations[actor.animation_index].count_till_update) {
-		animations[actor.animation_index].frames[actor.animation_state].current_frame_index =
-			(animations[actor.animation_index].frames[actor.animation_state].current_frame_index + 1) %
-			animations[actor.animation_index].frames[actor.animation_state].count;
-		animations[actor.animation_index].counter = 0;
+	Animation *animation = actor->animation;
+	if (animation->counter > animation->count_till_update) {
+		actor->current_animation_frame = (actor->current_animation_frame + 1) % animation->frames[actor->animation_state].count;
+		animation->counter = 0;
+
+		if (actor->current_animation_frame == 0) {
+			if (actor->one_shot) {
+				actor->animation_state = actor->idle_animation;
+				actor->one_shot = false;
+			}
+		}
+
 	} else {
-		animations[actor.animation_index].counter++;
+		animation->counter++;
 	}
 }
 
-// TODO: Pool this into an allocator
-// TODO: Turn them into array_view as well
-Animation animations[256];
-i32 animation_count;
-AnimationFrame animation_frame_buffer[256] = {};
-i32 animation_frame_buffer_count = 0;
-Texture textures[64];
-i32 texture_count = 0;
-
-bool expect(String* a, u8 c, char *error)
+bool expect(String* a, u8 c, const char *error)
 {
 	if (a->data[0] == c) {
 		string_chop_left(a, 1);
@@ -252,16 +288,13 @@ bool expect(String* a, u8 c, char *error)
 	fatal_error(error);
 }
 
-i32 parse_animation_file(SDL_Renderer *renderer, const char *file_path)
+Animation* parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 {
 	Animation animation = {};
 	animation.frames = animation_frame_buffer + animation_frame_buffer_count;
 	String animation_file = read_entire_file(file_path);
 	String animation_file_start = animation_file;
-	
-	DEFER {
-		SDL_free(animation_file_start.data);
-	};
+
 	{
 		String line = string_chop_by_delim(&animation_file, '\n');
 		while (line.len > 0) {
@@ -289,6 +322,10 @@ i32 parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 				string_chop_by_delim(&line, ' ');
 				line = string_trim(line);
 				animation.frames[animation.frame_count].count = string_parse_i32(line);
+				// in case one shot: true is required in the animation file
+				/*string_chop_by_delim(&line, ' ');
+				line = string_trim(line);
+				animation.frames[animation.frame_count].one_shot = line == "true";*/
 
 				animation.frames[animation.frame_count].texture_index = texture_count - 1;
 				animation.frame_count++;
@@ -297,8 +334,10 @@ i32 parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 			line = string_chop_by_delim(&animation_file, '\n');
 		}
 	}
+	SDL_free(animation_file_start.data);
+
 	animations[animation_count] = animation;
-	return animation_count++;
+	return &animations[animation_count++];
 }
 
 // TODO: YEET
@@ -370,6 +409,26 @@ void draw_capsule(SDL_Renderer *renderer, Capsule c, Uint32 color)
 	draw_ring(renderer, {c.b - camera + resolution / 2.f, c.radius}, color);
 }
 
+void refresh_buffer(InputAction* buffer, int* size) 
+{
+	InputAction buffer_buffer[ArrayCount(buffer_actions)] = {};
+	int buffer_buffer_count = 0;
+
+	for (int i = 0; i < *size; ++i) {
+		if (buffer[i].duration > 0) {
+			buffer_buffer[buffer_buffer_count++] = buffer[i];
+		}
+	}
+	for (int i = 0; i < buffer_buffer_count; ++i) {
+		buffer[i] = buffer_buffer[i];
+	}
+
+	*size = buffer_buffer_count;
+	
+	memset(buffer, 0, sizeof(buffer_actions)); // TODO: fix this with an array type
+	memcpy(buffer, buffer_buffer, buffer_buffer_count * sizeof(*buffer));
+}
+
 i32 main(i32 argc, char **argv)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
@@ -381,6 +440,7 @@ i32 main(i32 argc, char **argv)
 										  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
 	// NOTE: Apparently using SDL_RENDERER_ACCELERATED is bad because it forces us to create a hardware
 	// renderer, and just crash if it can't instead of falling back to a software renderer.
+
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
 	if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND) < 0) {
 		fatal_error(SDL_GetError(), nullptr);
@@ -395,11 +455,13 @@ i32 main(i32 argc, char **argv)
 	Actor player = {};
 	Actor enemy = {};
 
-	player.animation_index = parse_animation_file(renderer, u8"./data/player.anims");
-	player.size = { 3.f * animations[player.animation_index].width, 3.f * animations[player.animation_index].height };
+	player.animation = parse_animation_file(renderer, "./data/player.anims");
+	player.idle_animation = PLAYER_ANIMATION_IDLE;
+	player.size = { 3.f * player.animation->width, 3.f * player.animation->height };
 
-	enemy.animation_index = parse_animation_file(renderer, u8"./data/enemy.anims");
-	enemy.size = { 2.f * animations[enemy.animation_index].width, 2.f * animations[enemy.animation_index].height };
+	enemy.animation = parse_animation_file(renderer, "./data/enemy.anims");
+	enemy.idle_animation = ENEMY_ANIMATION_IDLE;
+	enemy.size = { 2.f * enemy.animation->width, 2.f * enemy.animation->height };
 
 	enemy.pos = (resolution - enemy.size) / 2;
 
@@ -415,7 +477,11 @@ i32 main(i32 argc, char **argv)
 	//poly.pos = V2(mouse.x, mouse.y);
 	poly.pos = resolution * 0.25f;
 
-	bool left_button_clicked = false;
+	bool left_button_is_down = false;
+	bool left_button_was_down = false;
+	r32 frame_time = 1/60.f;
+
+	r32 total_frame_time = 0;
 
 	while (is_running) {
 
@@ -423,11 +489,16 @@ i32 main(i32 argc, char **argv)
 		// memset(input.is_down, 0, sizeof(input.is_down));
 		SDL_memset(input.half_transition, 0, sizeof(input.half_transition));
 
+		left_button_was_down = left_button_is_down;
+
+		total_frame_time += frame_time;
+
 		V2 mouse;
 		{
 			i32 mouse_x, mouse_y;
 
-			left_button_clicked = SDL_GetMouseState(&mouse_x, &mouse_y) & SDL_BUTTON_LMASK;
+			//left_button_clicked = SDL_GetMouseState(&mouse_x, &mouse_y) & SDL_BUTTON_LMASK;
+			SDL_GetMouseState(&mouse_x, &mouse_y);
 			mouse = { (r32) mouse_x, (r32) mouse_y };
 		}
 
@@ -448,8 +519,12 @@ i32 main(i32 argc, char **argv)
 					input.half_transition[event.key.keysym.scancode]++;
 				} break;
 
-				case SDL_MOUSEBUTTONDOWN:
-				{
+				case SDL_MOUSEBUTTONDOWN: {
+					left_button_is_down = true;
+				} break;
+
+				case SDL_MOUSEBUTTONUP: {
+					left_button_is_down = false;
 				} break;
 
 				case SDL_KEYUP:
@@ -460,11 +535,112 @@ i32 main(i32 argc, char **argv)
 		}
 
 		// TODO: Check the half transitions here
+
+		bool left_button_clicked = left_button_is_down && !left_button_was_down;
+
+		if (is_held(&input, SDL_SCANCODE_W)) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_MOVE_UP,};
+		}
+		if (is_held(&input, SDL_SCANCODE_A)) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_MOVE_LEFT,};
+		}
+		if (is_held(&input, SDL_SCANCODE_S)) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_MOVE_DOWN,};
+		}
+		if (is_held(&input, SDL_SCANCODE_D)) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_MOVE_RIGHT,};
+		}
+		if (is_pressed(&input, SDL_SCANCODE_E) || left_button_clicked) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_ATTACK, .duration = .9f, };
+		}
+		if (is_pressed(&input, SDL_SCANCODE_SPACE)) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_JUMP,};
+		}
+		if (is_held(&input, SDL_SCANCODE_LCTRL)) {
+			buffer_actions[buffer_action_size++] = { .action = ACTION_CROUCH,};
+		}
+
+
 		player.accn = {};
-		player.accn.x -= is_held(&input, SDL_SCANCODE_A); // input.half_transition[SDL_SCANCODE_A] > 0;
-		player.accn.x += is_held(&input, SDL_SCANCODE_D); // input.half_transition[SDL_SCANCODE_D] > 0;
-		player.accn.y -= is_held(&input, SDL_SCANCODE_W); // input.half_transition[SDL_SCANCODE_W] > 0;
-		player.accn.y += is_held(&input, SDL_SCANCODE_S); // input.half_transition[SDL_SCANCODE_S] > 0;
+
+		// apply all buffer actions here
+		{
+			if (buffer_action_size >= ArrayCount(buffer_actions)) {
+				__debugbreak();
+			}
+
+			bool attack_encountered = false;
+			static int counter = 0;
+
+			for (int i = 0; i < buffer_action_size; ++i) {
+				if (!attack_encountered && buffer_actions[i].action == ACTION_ATTACK)
+					buffer_actions[i].duration -= frame_time;
+				switch (buffer_actions[i].action) {
+					case ACTION_NONE: {
+						// no op
+						player.animation_state = PLAYER_ANIMATION_IDLE;
+						player.one_shot = false;
+					} break;
+					case ACTION_MOVE_LEFT: {
+						player.accn.x -= 1;
+						player.animation_state = PLAYER_ANIMATION_RUN;
+						player.flipped = true;
+						player.one_shot = false;
+					} break;
+
+					case ACTION_MOVE_RIGHT: {
+						player.accn.x += 1;
+						player.animation_state = PLAYER_ANIMATION_RUN;
+						player.flipped = false;
+						player.one_shot = false;
+					} break;
+
+					case ACTION_MOVE_UP: {
+						player.accn.y -= 1;
+					} break;
+
+					case ACTION_MOVE_DOWN: {
+						player.accn.y += 1;
+					} break;
+
+					case ACTION_ATTACK: {
+						if (buffer_actions[i].duration > 0 && !attack_encountered && !buffer_actions[i].consumed) {
+							buffer_actions[i].consumed = true;
+							player.animation_state = PLAYER_ANIMATION_ATK1 + player.combo;
+							player.current_animation_frame = 0;
+							player.combo = (player.combo + 1) % 3; // TODO: un-hardcode this
+							player.one_shot = true;
+							char buff[32] = {};
+							SDL_snprintf(buff, sizeof(buff), "Attack %d", counter++);
+							SDL_SetWindowTitle(window, buff);
+
+						}
+						attack_encountered = true;
+					} break;
+
+					case ACTION_JUMP: {
+
+					} break;
+
+					case ACTION_CROUCH: {
+						player.animation_state = PLAYER_ANIMATION_CROUCH;
+					} break;
+				}
+			}
+
+			if (buffer_action_size == 0) {
+				player.animation_state = PLAYER_ANIMATION_IDLE;
+			}
+
+			if (!attack_encountered) {
+				player.combo = 0;
+				counter = 0;
+				SDL_SetWindowTitle(window, "Attacks Ended");
+			}
+
+		}
+
+		refresh_buffer(buffer_actions, &buffer_action_size);
 
 		enemy.accn = {};
 		enemy.accn.y -= is_held(&input, SDL_SCANCODE_UP);
@@ -472,50 +648,26 @@ i32 main(i32 argc, char **argv)
 		enemy.accn.x += is_held(&input, SDL_SCANCODE_RIGHT);
 		enemy.accn.y += is_held(&input, SDL_SCANCODE_DOWN);
 
-		if (is_pressed(&input, SDL_SCANCODE_SPACE)) {
-			// player.animation_state = (player.animation_state + 1) % PLAYER_ANIMATION_COUNT;
-			enemy.animation_state = (enemy.animation_state + 1) % ENEMY_ANIMATION_COUNT;
-		}
+		//if (is_pressed(&input, SDL_SCANCODE_SPACE)) {
+		//	// player.animation_state = (player.animation_state + 1) % PLAYER_ANIMATION_COUNT;
+		//	enemy.animation_state = (enemy.animation_state + 1) % COUNT_ENEMY_ANIMATION;
+		//}
 
 		player.accn = normalizez(player.accn);
 		enemy.accn = normalizez(enemy.accn);
 
 		r32 speed = 250.f;
 
-		if (!player.attacking) {
-			if (player.accn.x < 0) {
-				player.animation_state = PLAYER_ANIMATION_RUN;
-				player.flipped = true;
-			} else if (player.accn.x > 0) {
-				player.animation_state = PLAYER_ANIMATION_RUN;
-				player.flipped = false;
-			} else {
-				player.animation_state = PLAYER_ANIMATION_IDLE;
-			}
-		}
+		//if (player.accn.x != 0 && player.animation_state == PLAYER_ANIMATION_RUN)
+		//		player.animation_state = PLAYER_ANIMATION_IDLE;
 
-		static int combo = -1;
-		if (left_button_clicked || is_pressed(&input, SDL_SCANCODE_E)) {
-			combo = (combo + 1) % 3;
-			player.attacking = true;
-			player.attack_timer = 0.5f;
-			player.animation_state = PLAYER_ANIMATION_ATK1 + combo;
-		}
-
-
-		if (player.attack_timer > 0) {
-			player.attack_timer -= dt;
-
-		} else {
-			player.attack_timer = 0;
-			player.attacking = false;
-			combo = -1;
-		}
+		//if (is_held(&input, SDL_SCANCODE_LCTRL)) {
+		//} else {
+		//	if (player.animation_state == PLAYER_ANIMATION_CROUCH)
+		//		player.animation_state = PLAYER_ANIMATION_IDLE;
+		//}
 
 		// TODO: generate sword collider and make others get damaged if appropriate
-		if (player.attacking) {
-
-		}
 
 		Rect r_player = { player.pos, player.pos + player.size };
 		Rect r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
@@ -528,8 +680,8 @@ i32 main(i32 argc, char **argv)
 
 		while (accumulator >= dt) {
 			// call into physics
-			player.pos += speed * player.accn * dt;
 
+			player.pos += speed * player.accn * dt;
 			// forgot to update the player capsule after moving woops
 			c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
 			c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
@@ -541,37 +693,39 @@ i32 main(i32 argc, char **argv)
 
 			{
 				V2 dist;
-				
+
 				if (epa(c_player, r_enemy, dist)) {
 					player.pos -= dist / 2;
 					enemy.pos += dist / 2;
-					// Updating the player capsule if we've collided
 					c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
 					c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
 					r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
-
 					collision_color = 0xffffffff;
 				}
 			}
 			{
 				V2 dist;
 				if (epa(poly, r_enemy, dist)) {
-					poly.pos -= dist / 2;	// we're directly updating the polygon's position, so don't have to do anything else
-					enemy.pos += dist / 2;
-					r_enemy = { enemy.pos + enemy.size / 4.f , enemy.pos + enemy.size * 3.f / 4.f };
+					poly.pos -= dist;	// for the polygon, just updating its position works
 					collision_color = 0xff00ffff;
 				}
 			}
 			{
 				V2 dist;
-				if (epa(poly, c_player, dist)) {
-					poly.pos -= dist / 2;	// same here
-					player.pos += dist / 2;	// same here
+				if (epa(c_player, poly, dist)) {
+					player.pos -= dist;	// same here
 					c_player.a = player.pos + V2(1, 0.75) * player.size * 0.5f;
 					c_player.b = c_player.a + V2(0, 1) * player.size * 0.4f;
 					collision_color = 0x00ffffff;
 				}
 			}
+
+			camera = lerp(camera, 0.025f, player.pos);
+
+			update_frame(&player);
+			update_frame(&enemy);
+
+
 			t += dt;
 			accumulator -= dt;
 		}
@@ -579,9 +733,9 @@ i32 main(i32 argc, char **argv)
 		SDL_SetRenderDrawColor(renderer, HexColor(0x181818ff));
 		SDL_RenderClear(renderer);
 
-		display_frame(renderer, textures, animations, player);
+		display_frame(renderer, textures, &player);
 
-		display_frame(renderer, textures, animations, enemy);
+		display_frame(renderer, textures, &enemy);
 
 		auto rect_to_sdl_rect = [] (Rect a) -> SDL_FRect {
 			return { a.min.x, a.min.y, (a.max - a.min).x, (a.max - a.min).y };
@@ -600,20 +754,19 @@ i32 main(i32 argc, char **argv)
 
 		SDL_RenderPresent(renderer);
 
-		update_frame(animations, player);
-		update_frame(animations, enemy);
 
 		u64 current_counter = SDL_GetPerformanceCounter();
-		r32 frame_time = ((1000000.0f * (current_counter - last_counter)) / (r32) query_perf_freq) / 1000000.0f;
+		frame_time = ((1000000.0f * (current_counter - last_counter)) / (r32) query_perf_freq) / 1000000.0f;
 		last_counter = current_counter;
 
-		char buff[32] = {};
-		SDL_snprintf(buff, sizeof(buff), "%f", 1.f / frame_time);
-		SDL_SetWindowTitle(window, buff);
+		/*{
+			char buff[32] = {};
+			SDL_snprintf(buff, sizeof(buff), "%f", 1.f / frame_time);
+			SDL_SetWindowTitle(window, buff);
+		}*/
+		// TODO: look into this
+		// camera = damp(camera, 0.025f, frame_time, player.pos);
 
-		//camera += (player.pos - camera) * 0.025f;
-		camera.x = lerp(camera.x, 0.025f, player.pos.x);
-		camera.y = lerp(camera.y, 0.025f, player.pos.y);
 		accumulator += frame_time;
 	}
 

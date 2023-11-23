@@ -146,6 +146,18 @@ T ilerp(T a, T x, T b) {
 }
 
 template<typename T>
+T damp(T a, float smoothing, float dt, T b)
+{
+	return lerp(a, 1 - powf(smoothing, dt), b);
+	//return lerp(a, 1 - expf(1 - lambda * dt), b);
+}
+
+float ease_in_sin(float x) 
+{
+  return 1 - cosf((x * PI32) / 2);
+}
+
+template<typename T>
 T map_range(T r1, T r2, T val, T r3, T r4) {
 	return r3 + (r4 - r3) * (val - r1) / (r2 - r1);
 }
@@ -216,13 +228,15 @@ V2 support(Polygon a, V2 dir) {
 	int adj_index;
 	float adj_dot;
 	while (true) {
-		adj_index = (index + 1 == a.size ? 0 : index + 1);
+		//adj_index = (index + 1 == a.size ? 0 : index + 1);
+		adj_index = (index + 1) % a.size;
 		adj_dot = dot(dir, a.points[adj_index]);
 		if (adj_dot > cur_dot) {
 			cur_dot = adj_dot;
 			index = adj_index;
 		} else {
-			adj_index = (index == 0 ? a.size - 1 : index - 1);
+			//adj_index = (index == 0 ? a.size - 1 : index - 1);
+			adj_index = (a.size + (index - 1)) % a.size;
 			adj_dot = dot(dir, a.points[adj_index]);
 			if (cur_dot > adj_dot) 
 				break;
