@@ -1,13 +1,21 @@
-template <typename T> struct ExitScope {
-	T lambda;
-	ExitScope(T lambda) : lambda(lambda) {}
-	~ExitScope() { lambda(); }
-};
-
-struct ExitScopeHelper {
-	template <typename T> ExitScope<T> operator+(T t) { return t; }
-};
-
+#ifndef CONCAT_INT
 #define CONCAT_INT(a, b) a##b
+#endif
+#ifndef CONCAT
 #define CONCAT(a, b) CONCAT_INT(a, b)
-#define DEFER auto &CONCAT(defer__, __LINE__) = ExitScopeHelper() + [&]()
+#endif
+
+template <typename F>
+struct DeferHelper {
+	F f;
+	DeferHelper(F f) : f(f) {}
+	~DeferHelper() { f(); }
+};
+
+template <typename F>
+DeferHelper<F> defer_func(F f) {
+	return DeferHelper<F>(f);
+}
+
+#define DEFER_INT(x)    CONCAT(x, __COUNTER__)
+#define Defer(code)   auto DEFER_INT(_defer_) = defer_func([&](){code;})
