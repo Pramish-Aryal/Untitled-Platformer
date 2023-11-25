@@ -24,23 +24,16 @@
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include <stdint.h>
+
 #include <math.h>
+
+#include "common.h"
 
 // TODO: replace SDL with DirectX
 #include <SDL2/SDL.h>
-
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int8_t i8;
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
-typedef float r32;
-typedef double r64;
-typedef ptrdiff_t imem;
+#define HexColor(c) ((c) >> (8 * 3)) & 0xff, ((c) >> (8 * 2)) & 0xff, ((c) >> (8 * 1)) & 0xff, ((c) >> (8 * 0)) & 0xff
+#define UnHexColor(c, r, g, b, a) r = ((c) >> 24) & 0xff; g = ((c) >> 16) & 0xff; b = ((c) >> 8) & 0xff; (a) = (c) & 0xff
+// TODO: Create a color type
 
 
 [[noreturn]] void fatal_error(const char *message, SDL_Window *window = nullptr) {
@@ -54,12 +47,10 @@ void log_error(const char *message, SDL_Window *window = nullptr) {
 	SDL_Log(message);
 }
 
-#include "defer.h"
 #include "ren_math.h"
 // TODO: Add support for something like Option<T>?
 #include "ren_string.h"
 #include <string.h>
-
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -69,16 +60,6 @@ void log_error(const char *message, SDL_Window *window = nullptr) {
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
-
-#define HexColor(c) ((c) >> (8 * 3)) & 0xff, ((c) >> (8 * 2)) & 0xff, ((c) >> (8 * 1)) & 0xff, ((c) >> (8 * 0)) & 0xff
-#define UnHexColor(c, r, g, b, a) r = ((c) >> 24) & 0xff; g = ((c) >> 16) & 0xff; b = ((c) >> 8) & 0xff; (a) = (c) & 0xff
-#define ArrayCount(a) (sizeof(a) / sizeof(*(a)))
-
-//Maybe templatize them?
-#define Max(a, b) ((a) > (b) ? (a) : (b))
-#define Min(a, b) ((a) < (b) ? (a) : (b))
-#define Clamp(a, x, b) (Min(Max((a), (x)), (b))
-
 
 struct Texture {
 	i32 width;
@@ -139,7 +120,11 @@ struct Animation {
 	i32 width;
 	i32 height;
 	i32 count_till_update;
-	i32 counter;
+	i32 update_counter;
+	i32 state;
+	i32 current_animation_frame;
+	i32 default_state; // default animation to return to after one shot
+	bool one_shot;
 };
 
 struct Actor {
@@ -147,13 +132,8 @@ struct Actor {
 	V2 size;
 	V2 vel;
 	V2 accn;
-	// animation data
 	Animation *animation;
-	i32 animation_state;
-	i32 current_animation_frame;
 	i32 combo; // only used for the player
-	i32 idle_animation; // default animation to return to after one shot
-	bool one_shot;
 	bool flipped;
 };
 
@@ -249,12 +229,12 @@ void display_frame(SDL_Renderer *renderer, Texture *textures, Actor* actor)
 {
 	Animation *animation = actor->animation;
 	// HACK: Simplify this (or even think up a better solution)
-	i32 frame_index = actor->current_animation_frame +
-		animation->frames[actor->animation_state].start_frame_index;
+	i32 frame_index = animation->current_animation_frame +
+		animation->frames[animation->state].start_frame_index;
 	i32 index_x = (frame_index) %
-		(i32) (textures[animation->frames[actor->animation_state].texture_index].width / animation->width);
+		(i32) (textures[animation->frames[animation->state].texture_index].width / animation->width);
 	i32 index_y = (frame_index) /
-		(i32) (textures[animation->frames[actor->animation_state].texture_index].width / animation->width);
+		(i32) (textures[animation->frames[animation->state].texture_index].width / animation->width);
 
 	SDL_Rect src_rect = {};
 	src_rect.x = index_x * animation->width;
@@ -264,9 +244,9 @@ void display_frame(SDL_Renderer *renderer, Texture *textures, Actor* actor)
 
 	SDL_FRect dest_rect = { actor->pos.x - camera.x + resolution.x / 2.f, actor->pos.y - camera.y + resolution.y / 2.f,  actor->size.x, actor->size.y };
 
-	//SDL_RenderCopyF(renderer, textures[animation->frames[actor->animation_state].texture_index].tex, &src_rect, &dest_rect);
+	//SDL_RenderCopyF(renderer, textures[animation->frames[animation->state].texture_index].tex, &src_rect, &dest_rect);
 	SDL_RenderCopyExF(renderer, 
-					  textures[animation->frames[actor->animation_state].texture_index].tex, 
+					  textures[animation->frames[animation->state].texture_index].tex,
 					  &src_rect, &dest_rect,
 					  0, nullptr, 
 					  actor->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
@@ -275,19 +255,19 @@ void display_frame(SDL_Renderer *renderer, Texture *textures, Actor* actor)
 void update_frame(Actor* actor)
 {
 	Animation *animation = actor->animation;
-	if (animation->counter > animation->count_till_update) {
-		actor->current_animation_frame = (actor->current_animation_frame + 1) % animation->frames[actor->animation_state].count;
-		animation->counter = 0;
+	if (animation->update_counter > animation->count_till_update) {
+		animation->current_animation_frame = (animation->current_animation_frame + 1) % animation->frames[animation->state].count;
+		animation->update_counter = 0;
 
-		if (actor->current_animation_frame == 0) {
-			if (actor->one_shot) {
-				actor->animation_state = actor->idle_animation;
-				actor->one_shot = false;
+		if (animation->current_animation_frame == 0) {
+			if (animation->one_shot) {
+				animation->state = animation->default_state;
+				animation->one_shot = false;
 			}
 		}
 
 	} else {
-		animation->counter++;
+		animation->update_counter++;
 	}
 }
 
@@ -468,6 +448,9 @@ Animation* parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 					fatal_error("Unexpected metadata", nullptr);
 				}
 			} else if (line[0] != '\r') {
+				if (line[0] == '!') {
+					animation.default_state = animation.frame_count;
+				}
 				string_chop_by_delim(&line, ':');
 				line = string_trim(line);
 				animation.frames[animation.frame_count].start_frame_index = string_parse_i32(line);
@@ -478,7 +461,7 @@ Animation* parse_animation_file(SDL_Renderer *renderer, const char *file_path)
 				/*string_chop_by_delim(&line, ' ');
 				line = string_trim(line);
 				animation.frames[animation.frame_count].one_shot = line == "true";*/
-
+				
 				animation.frames[animation.frame_count].texture_index = texture_count - 1;
 				animation.frame_count++;
 				animation_frame_buffer_count++;
@@ -607,11 +590,11 @@ i32 main(i32 argc, char **argv)
 	Actor enemy = {};
 
 	player.animation = parse_animation_file(renderer, "./data/player.anims");
-	player.idle_animation = PLAYER_ANIMATION_IDLE;
+	//player.animation->default_animation = PLAYER_ANIMATION_IDLE;
 	player.size = { 3.f * player.animation->width, 3.f * player.animation->height };
 
 	enemy.animation = parse_animation_file(renderer, "./data/enemy.anims");
-	enemy.idle_animation = ENEMY_ANIMATION_IDLE;
+	//enemy.animation->default_animation = ENEMY_ANIMATION_IDLE;
 	enemy.size = { 2.f * enemy.animation->width, 2.f * enemy.animation->height };
 
 	enemy.pos = (resolution - enemy.size) / 2;
@@ -741,21 +724,21 @@ i32 main(i32 argc, char **argv)
 				switch (buffer_actions[i].action) {
 					case ACTION_NONE: {
 						// no op
-						player.animation_state = PLAYER_ANIMATION_IDLE;
-						player.one_shot = false;
+						player.animation->state = PLAYER_ANIMATION_IDLE;
+						player.animation->one_shot = false;
 					} break;
 					case ACTION_MOVE_LEFT: {
 						player.accn.x -= 1;
-						player.animation_state = PLAYER_ANIMATION_RUN;
+						player.animation->state = PLAYER_ANIMATION_RUN;
 						player.flipped = true;
-						player.one_shot = false;
+						player.animation->one_shot = false;
 					} break;
 
 					case ACTION_MOVE_RIGHT: {
 						player.accn.x += 1;
-						player.animation_state = PLAYER_ANIMATION_RUN;
+						player.animation->state = PLAYER_ANIMATION_RUN;
 						player.flipped = false;
-						player.one_shot = false;
+						player.animation->one_shot = false;
 					} break;
 
 					case ACTION_MOVE_UP: {
@@ -769,10 +752,10 @@ i32 main(i32 argc, char **argv)
 					case ACTION_ATTACK: {
 						if (buffer_actions[i].duration > 0 && !attack_encountered && !buffer_actions[i].consumed) {
 							buffer_actions[i].consumed = true;
-							player.animation_state = PLAYER_ANIMATION_ATK1 + player.combo;
-							player.current_animation_frame = 0;
+							player.animation->state = PLAYER_ANIMATION_ATK1 + player.combo;
+							player.animation->current_animation_frame = 0;
 							player.combo = (player.combo + 1) % 3; // TODO: un-hardcode this
-							player.one_shot = true;
+							player.animation->one_shot = true;
 							char buff[32] = {};
 							SDL_snprintf(buff, sizeof(buff), "Attack %d", counter++);
 							SDL_SetWindowTitle(window, buff);
@@ -786,13 +769,13 @@ i32 main(i32 argc, char **argv)
 					} break;
 
 					case ACTION_CROUCH: {
-						player.animation_state = PLAYER_ANIMATION_CROUCH;
+						player.animation->state = PLAYER_ANIMATION_CROUCH;
 					} break;
 				}
 			}
 
 			if (buffer_action_size == 0) {
-				player.animation_state = PLAYER_ANIMATION_IDLE;
+				player.animation->state = player.animation->default_state;
 			}
 
 			if (!attack_encountered) {

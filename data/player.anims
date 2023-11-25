@@ -2,7 +2,7 @@
 #width: 50
 #height: 37
 #count: 15
-IDLE: 0 4
+!IDLE: 0 4
 CROUCH: 4 4
 RUN: 8 5
 ATK1: 42 5
